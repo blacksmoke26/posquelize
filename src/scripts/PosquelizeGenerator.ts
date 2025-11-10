@@ -423,7 +423,11 @@ export default class PosquelizeGenerator {
     // Clean root directory if option is enabled
     if (this.getOptions().cleanRootDir) {
       console.log('Removing leftovers...');
-      await rimraf(this.rootDir);
+      try {
+        await rimraf(this.rootDir);
+      } catch {
+        console.error('Error: Unable to remove the app directory due to used by another process');
+      }
     }
 
     // Initialize directory structure

@@ -4,8 +4,6 @@
  * @see https://github.com/blacksmoke26
  */
 
-import { json2ts } from 'json-ts';
-
 // utils
 import { getJsType } from '~/constants/pg';
 import TableUtils from '~/classes/TableUtils';
@@ -15,6 +13,7 @@ import ColumnInfoUtils from '~/classes/ColumnInfoUtils';
 // types
 import type { TableColumnRaw } from '~/typings/knex';
 import type { SequelizeType } from '~/constants/sequelize';
+import { JsonToFlattenedTsConverter } from '~/converters/JsonToFlattenedTsConverter';
 
 /**
  * Parameters required for converting a JSON column to a TypeScript interface.
@@ -124,9 +123,9 @@ export default abstract class TypeScriptTypeParser {
 
     return !TypeUtils.isJSON(columnType)
       ? defaultValue
-      : json2ts(
-        JSON.parse(defaultValue === 'null' ? '{}' : defaultValue),
-        {prefix: '', rootName: TableUtils.toJsonColumnTypeName(tableName, columnName)},
+      : JsonToFlattenedTsConverter.convert(
+        JSON.parse(!defaultValue || defaultValue === 'null' ? '{}' : defaultValue),
+        TableUtils.toJsonColumnTypeName(tableName, columnName),
       );
   }
 }
