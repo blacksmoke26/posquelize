@@ -230,7 +230,7 @@ export default abstract class TableColumns {
           sequelizeTypeParams: sequelizeTypeParams as string,
         }),
         tsInterface: jsonbDataType?.trim?.()
-          ? await TypeScriptTypeParser.jsonToInterface({
+          ? TypeScriptTypeParser.jsonToInterface({
               columnType: columnType,
               columnName: name,
               tableName,
