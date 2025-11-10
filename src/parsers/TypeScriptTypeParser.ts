@@ -116,9 +116,9 @@ export default abstract class TypeScriptTypeParser {
    * });
    * ```
    */
-  public static async jsonToInterface(
+  public static jsonToInterface(
     params: JsonToTypescriptParams,
-  ): Promise<string | null> {
+  ): string | null {
     const { columnType, tableName, columnName, defaultValue } = params;
 
     return !TypeUtils.isJSON(columnType)
