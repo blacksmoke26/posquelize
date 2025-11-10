@@ -97,15 +97,15 @@ export class JsonToFlattenedTsConverter {
    */
   private convertJson(jsonData: unknown, interfaceName: string = 'RootObject'): string {
     if (typeof jsonData !== 'object' || jsonData === null) {
-      throw new Error('Input must be a valid JSON object.');
+      return `interface ${interfaceName} {}`;
     }
 
     // Reset the visited set for each conversion run
     this.visitedObjects = new WeakSet<object>();
 
-    const interfaceBody = this.generateObjectBody(jsonData, 0);
+    const interfaceBody = this.generateObjectBody(jsonData, 0).trim();
 
-    return `interface ${interfaceName} ${interfaceBody.trim()}`;
+    return `interface ${interfaceName} ${interfaceBody}`;
   }
 
   /**
@@ -127,7 +127,7 @@ export class JsonToFlattenedTsConverter {
     // Handle arrays
     if (Array.isArray(obj)) {
       if (obj.length === 0) {
-        return 'any[]'; // Or a more specific empty array type if desired
+        return '{}'; // Or a more specific empty array type if desired
       }
       // Use the first element's type as the representative for the whole array
       const elementType = this.getType(obj[0], indentLevel + 1);

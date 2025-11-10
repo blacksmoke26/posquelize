@@ -91,7 +91,7 @@ export class JsonToTsConverter {
    */
   private convertJson(jsonData: unknown, rootInterfaceName: string): string {
     if (typeof jsonData !== 'object' || jsonData === null) {
-      throw new Error('Input must be a valid JSON object.');
+      return `interface ${rootInterfaceName} {}`;
     }
 
     this.interfaces.clear();
