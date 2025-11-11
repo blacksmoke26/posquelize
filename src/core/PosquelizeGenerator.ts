@@ -91,7 +91,7 @@ export interface GeneratorOptions {
    * ```
    * @see MigrationGenerator For the underlying migration generation implementation
    */
-  migrations?: Pick<MigrationOptions, 'generate'> | false;
+  migrations?: MigrationOptions['generate'] | false;
 
   /**
    * Whether to generate Entity Relationship Diagram (ERD) files for the database schema.
