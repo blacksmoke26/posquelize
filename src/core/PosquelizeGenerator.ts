@@ -494,9 +494,13 @@ export default class PosquelizeGenerator {
     });
 
     // Write server configuration file
-    TemplateWriter.writeServerFile(FileHelper.dirname(this.getBaseDir()), config.anyModelName, this.getOptions().dirname!);
+    TemplateWriter.writeServerFile(FileHelper.dirname(this.getBaseDir()), config.anyModelName, this.getOptions().dirname);
+
     // Generate relationship definitions
-    RelationshipGenerator.generateRelations(this.dbData.relationships, initTplVars);
+    RelationshipGenerator.generateRelations(this.dbData.relationships, initTplVars, {
+      schemas: this.getOptions().schemas,
+      tables: this.getOptions().tables,
+    });
 
     // Write models initializer file
     const fileName = FileHelper.join(this.getBaseDir('models'), 'index.ts');
