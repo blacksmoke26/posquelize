@@ -28,7 +28,7 @@ import StringHelper from '~/helpers/StringHelper';
 import DbUtils from '~/classes/DbUtils';
 import TemplateWriter from './TemplateWriter';
 import KnexClient from '~/classes/KnexClient';
-import MigrationGenerator from './MigrationGenerator';
+import MigrationGenerator, { MigrationOptions } from './MigrationGenerator';
 import RelationshipGenerator from './RelationshipGenerator';
 import TableColumns, { type ColumnInfo } from '~/classes/TableColumns';
 
@@ -63,21 +63,35 @@ export interface GeneratorOptions {
   cleanRootDir?: boolean;
 
   /**
-   * Whether to generate migration files for the database schema.
-   * When enabled, creates Knex.js migration scripts that can recreate the database structure
-   * including tables, columns, indexes, and foreign key constraints.
+   * Controls the generation of database migration files. When enabled, creates
+   * migration scripts that can recreate the database schema in another environment.
    *
-   * Migration files are generated in the migrations subdirectory of the base output directory
-   * and follow the standard Knex.js migration format.
+   * The migration files include:
+   * - Table creation statements with all columns and constraints
+   * - Index definitions (unique, primary, and regular indexes)
+   * - Foreign key constraints and relationships
+   * - Schema-specific considerations and naming conventions
+   *
+   * Set false to disable migration generation entirely. When truthy, accepts
+   * configuration options from MigrationOptions['generate'] to customize the
+   * migration generation behavior.
+   *
+   * Migration files are generated in the migrations subdirectory of the base
+   * output directory and follow the Knex migration format with up() and down()
+   * methods for rollback support.
    *
    * @default true
    * @example
    * ```typescript
-   * // Disable migration generation
+   * // Disable migrations
    * { migrations: false }
+   *
+   * // Enable with custom options
+   * { migrations: { indexes: true, foreignKeys: true } }
    * ```
+   * @see MigrationGenerator For the underlying migration generation implementation
    */
-  migrations?: boolean;
+  migrations?: Pick<MigrationOptions, 'generate'> | false;
 
   /**
    * Whether to generate Entity Relationship Diagram (ERD) files for the database schema.
@@ -196,6 +210,52 @@ export default class PosquelizeGenerator {
   }
 
   /**
+   * Filters database tables and schemas based on generator configuration.
+   *
+   * Determines whether a given table and schema combination should be included in the generation
+   * process based on the schemas and tables filtering options. This method is used throughout
+   * the generation process to ensure only the requested schemas and tables are processed.
+   *
+   * The filtering logic follows these rules:
+   * - If no schemas are specified (empty array), all schemas are allowed
+   * - If schemas are specified, the given schema must be in the allowed list
+   * - If no tables are specified (empty array), all tables are allowed
+   * - If tables are specified, the given table must be in the allowed list
+   * - Both schema and table filters must pass for the table to be included
+   *
+   * @param tableName - The name of the database table to check
+   * @param schemaName - The name of the database schema containing the table
+   * @returns True if the table/schema combination should be included in generation, false otherwise
+   *
+   * @example
+   * ```typescript
+   * // With options { schemas: ['public'], tables: ['users'] }
+   * filterSchemaTables('users', 'public') // true
+   * filterSchemaTables('posts', 'public') // false (table not in filter)
+   * filterSchemaTables('users', 'auth')   // false (schema not in filter)
+   *
+   * // With options { schemas: [], tables: [] } (no filters)
+   * filterSchemaTables('any_table', 'any_schema') // true (everything allowed)
+   * ```
+   */
+  private filterSchemaTables (tableName: string, schemaName: string): boolean {
+    let hasPassed = true;
+
+    const filterSchemas = this.getOptions().schemas;
+    const filterTables = this.getOptions().tables;
+
+    if (filterSchemas.length && !filterSchemas.includes(schemaName)) {
+      hasPassed = false;
+    }
+
+    if (filterTables.length && !filterTables.includes(tableName)) {
+      hasPassed = false;
+    }
+
+    return hasPassed;
+  }
+
+  /**
    * Fetches database schema information including schemas, indexes, relationships, and foreign keys.
    * This is an expensive operation that runs only once during generation.
    */
@@ -208,10 +268,21 @@ export default class PosquelizeGenerator {
       DbUtils.getForeignKeys(this.knex),
     ]);
 
-    this.dbData.schemas = schemas;
-    this.dbData.indexes = indexes;
-    this.dbData.relationships = relationships;
-    this.dbData.foreignKeys = foreignKeys;
+    this.dbData.schemas = schemas.filter(x => {
+      return !this.getOptions().schemas.length ? true : this.getOptions().schemas.includes(x);
+    });
+
+    this.dbData.indexes = indexes.filter(x => {
+      return this.filterSchemaTables(x.table, x.schema);
+    });
+
+    this.dbData.relationships = relationships.filter(x => {
+      return this.filterSchemaTables(x.source.schema, x.source.table) || this.filterSchemaTables(x.target.schema, x.target.table);
+    });
+
+    this.dbData.foreignKeys = foreignKeys.filter(x => {
+      return this.filterSchemaTables(x.tableName, x.schema);
+    });
   }
 
   /**
@@ -247,7 +318,7 @@ export default class PosquelizeGenerator {
   private async generateModels(initTplVars: InitTemplateVars, interfacesVar: { text: string }, config: {
     anyModelName: string
   }): Promise<void> {
-    const schemas = this.getFilteredSchemas();
+    const schemas = this.dbData.schemas;
 
     for await (const schemaName of schemas) {
       const schemaTables = await this.getSchemaTables(schemaName);
@@ -256,17 +327,6 @@ export default class PosquelizeGenerator {
         await this.processTable(tableName, schemaName, initTplVars, interfacesVar, config);
       }
     }
-  }
-
-  /**
-   * Filters schemas based on the generator options.
-   * Returns all schemas if no specific schemas are configured.
-   * @returns Array of filtered schema names
-   */
-  private getFilteredSchemas(): string[] {
-    return this.dbData.schemas.filter((x) => {
-      return !this.getOptions().schemas.length ? true : this.getOptions().schemas.includes(x);
-    });
   }
 
   /**
@@ -555,7 +615,7 @@ export default class PosquelizeGenerator {
    * @see {@link MigrationGenerator} For the underlying migration generation logic
    */
   private async generateMigrations(): Promise<void> {
-    if (!this.getOptions().migrations) {
+    if (this.getOptions().migrations === false) {
       return;
     }
 
@@ -570,6 +630,8 @@ export default class PosquelizeGenerator {
         dirname: this.getOptions().dirname,
         outDir: this.getBaseDir('migrations'),
         rootDir: this.rootDir,
+        tables: this.getOptions().tables,
+        generate: this.getOptions().migrations as MigrationOptions['generate']
       },
     );
 
