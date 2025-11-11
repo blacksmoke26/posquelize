@@ -17,8 +17,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import merge from 'deepmerge';
-import {rimraf} from 'rimraf';
-import {pascalCase} from 'change-case';
+import { rimraf } from 'rimraf';
+import { pascalCase } from 'change-case';
 
 // helpers
 import FileHelper from '~/helpers/FileHelper';
@@ -30,14 +30,14 @@ import TemplateWriter from './TemplateWriter';
 import KnexClient from '~/classes/KnexClient';
 import MigrationGenerator from './MigrationGenerator';
 import RelationshipGenerator from './RelationshipGenerator';
-import TableColumns, {type ColumnInfo} from '~/classes/TableColumns';
+import TableColumns, { type ColumnInfo } from '~/classes/TableColumns';
 
 // utils
-import ModelGenerator, {InitTemplateVars, ModelTemplateVars, sp} from './ModelGenerator';
+import ModelGenerator, { InitTemplateVars, ModelTemplateVars, sp } from './ModelGenerator';
 
 // types
-import type {Knex} from 'knex';
-import type {ForeignKey, Relationship, TableIndex} from '~/typings/utils';
+import type { Knex } from 'knex';
+import type { ForeignKey, Relationship, TableIndex } from '~/typings/utils';
 
 /**
  * Configuration options for the generator
@@ -60,7 +60,41 @@ export interface GeneratorOptions {
    * Whether to clean the root directory before generation
    * @default false
    */
-  cleanRootDir?: boolean;
+   cleanRootDir?: boolean;
+
+   /**
+    * Whether to generate migration files for the database schema.
+    * When enabled, creates Knex.js migration scripts that can recreate the database structure
+    * including tables, columns, indexes, and foreign key constraints.
+    *
+    * Migration files are generated in the migrations subdirectory of the base output directory
+    * and follow the standard Knex.js migration format.
+    *
+    * @default true
+    * @example
+    * ```typescript
+    * // Disable migration generation
+    * { migrations: false }
+    * ```
+    */
+   migrations?: boolean;
+
+   /**
+    * Whether to generate Entity Relationship Diagram (ERD) files for the database schema.
+    * When enabled, creates visual representations of the database structure including
+    * tables, relationships, constraints, and schema metadata.
+    *
+    * Diagram files are generated in the diagrams subdirectory of the base output directory
+    * and can be used for documentation and database visualization purposes.
+    *
+    * @default true
+    * @example
+    * ```typescript
+    * // Disable diagram generation
+    * { diagram: false }
+    * ```
+    */
+   diagram?: boolean;
 }
 
 /**
@@ -124,6 +158,8 @@ export default class PosquelizeGenerator {
         tables: [],
         dirname: 'database',
         cleanRootDir: false,
+        diagram: true,
+        migrations: true,
       },
       this.options,
     );
@@ -155,7 +191,6 @@ export default class PosquelizeGenerator {
     this.getBaseDir('base');
     this.getBaseDir('config');
     this.getBaseDir('typings');
-    this.getBaseDir('diagrams');
     this.getBaseDir('repositories');
     this.getBaseDir('seeders');
   }
@@ -468,7 +503,58 @@ export default class PosquelizeGenerator {
     TemplateWriter.renderOut('models-initializer', fileName, initTplVars);
     console.log('Models Initializer generated:', fileName);
 
-    // Generate migration files
+    await Promise.all([
+      this.generateMigrations(),
+      this.generateDiagram(),
+    ]);
+  }
+
+  /**
+   * Generates Entity Relationship Diagram (ERD) files for the database schema.
+   *
+   * This method creates visual representations of the database structure including
+   * tables, relationships, and constraints. The diagrams are generated in the
+   * diagrams subdirectory of the base output directory.
+   *
+   * Generation can be disabled by setting the diagram option to false in the
+   * generator configuration.
+   *
+   * @throws {Error} When diagram generation fails due to connection or permission issues
+   */
+  private async generateDiagram(): Promise<void> {
+    if (!this.getOptions().diagram) {
+      return;
+    }
+
+    await TemplateWriter.writeDiagrams(this.getBaseDir('diagrams'), this.connectionString);
+  }
+
+  /**
+   * Generates database migration files based on the current schema.
+   *
+   * This method creates migration scripts that can be used to recreate the database
+   * schema in another environment. It includes all tables, indexes, foreign keys,
+   * and other schema objects. The migrations are generated in the migrations
+   * subdirectory of the base output directory.
+   *
+   * The migration files follow the Knex.js migration format and include:
+   * - Table creation statements
+   * - Column definitions with types and constraints
+   * - Index creation
+   * - Foreign key constraints
+   * - Schema-specific considerations
+   *
+   * Generation can be disabled by setting the migrations option to false in the
+   * generator configuration.
+   *
+   * @throws {Error} When migration generation fails due to schema analysis errors
+   * @see {@link MigrationGenerator} For the underlying migration generation logic
+   */
+  private async generateMigrations(): Promise<void> {
+    if (!this.getOptions().migrations) {
+      return;
+    }
+
     const migGenerator = new MigrationGenerator(
       this.knex,
       {
@@ -484,8 +570,5 @@ export default class PosquelizeGenerator {
     );
 
     await migGenerator.generate();
-
-    // generate ERD (Entity-Relationship Diagram) diagrams
-    await TemplateWriter.writeDiagrams(path.normalize(`${this.getBaseDir()}/diagrams`), this.connectionString);
   }
 }
