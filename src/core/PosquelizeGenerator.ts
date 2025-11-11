@@ -233,7 +233,7 @@ export default class PosquelizeGenerator {
   private async getSchemaTables(schemaName: string): Promise<Readonly<string[]>> {
     const schemaTables = await DbUtils.getTables(this.knex, schemaName);
     return schemaTables.filter((x) => {
-      return !this.getOptions().tables.length ? true : this.getOptions().schemas.includes(x);
+      return !this.getOptions().tables.length ? true : this.getOptions().tables.includes(x);
     });
   }
 
