@@ -9,6 +9,9 @@
  * @module PosquelizeGenerator
  */
 
-import PosquelizeGenerator, {GeneratorOptions} from '~/core/PosquelizeGenerator';
+import PosquelizeGenerator from '~/core/PosquelizeGenerator';
+
+// types
+import type { GeneratorOptions } from '~/typings/generator';
 
 export {PosquelizeGenerator, GeneratorOptions};
