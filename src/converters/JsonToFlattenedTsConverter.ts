@@ -128,7 +128,7 @@ export class JsonToFlattenedTsConverter {
       }
       // Use the first element's type as the representative for the whole array
       const elementType = this.getType(obj[0], indentLevel);
-      return `${elementType}[]`;
+      return elementType.endsWith('}') ? elementType : `${elementType}[]`;
     }
 
     // Handle primitives
