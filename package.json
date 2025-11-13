@@ -4,7 +4,7 @@
   "publishConfig": {
     "tag": "latest"
   },
-  "description": "Automatically generate bare sequelize models, migrations and sequelize app from your database.",
+  "description": "Automatically generate SequelizeJS minimal application via the command line.",
   "main": "index.js",
   "types": "types",
   "keywords": [
@@ -39,6 +39,7 @@
   "bugs": {
     "url": "https://github.com/blacksmoke26/posquelize/issues"
   },
+  "homepage": "https://github.com/blacksmoke26/posquelize",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "clean": "rimraf lib && rimraf types",
