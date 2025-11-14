@@ -173,7 +173,16 @@ const generator = new PosquelizeGenerator(connectionString, __dirname + '/myapp'
   generator: {
     model: {
       addNullTypeForNullable: true, // Controls whether nullable typed property
-    }
+    },
+    enums: [{
+      path: 'public.products.status',
+      values: {active: 10, inactive: 5, deleted: 0, suspended: 3},
+      defaultValue: 10,
+    }, {
+      path: 'public.products.visibility',
+      values: ['public', 'private'],
+      // defaultValue: 'private', // Default Value is set in DDL
+    }],
   },
   diagram: false,       // Skip DBML diagram generation
   repositories: false   // Skip repository file generation
