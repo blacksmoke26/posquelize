@@ -120,6 +120,29 @@ export interface GeneratorOptions {
        * ```
        */
       values: (string[]) | { [k: string]: string | number },
+      /**
+       * The default value for the enum column when no explicit value is provided.
+       * This can be either a string or number value that matches one of the enum's
+       * allowed values. When specified, the database will automatically use this
+       * value for new records if no enum value is explicitly set.
+       *
+       * The default value must be compatible with the enum's value type:
+       * - For string array enums, provide a string that exists in the array
+       * - For object map enums, provide either a string key or a numeric value
+       *   that exists in the map
+       *
+       * @example
+       * ```typescript
+       * // For string array enum
+       * values: ["admin", "user", "guest"]
+       * defaultValue: "guest"  // Uses default of "guest"
+       *
+       * // For object map enum
+       * values: {active: 1, inactive: 0}
+       * defaultValue: 1  // Uses default of "active" (value 1)
+       * ```
+       */
+      defaultValue?: string | number;
     }>,
   };
 
