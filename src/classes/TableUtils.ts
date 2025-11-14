@@ -102,4 +102,30 @@ export default abstract class TableUtils {
       }`,
     );
   }
+
+  /**
+   * Generates a fully qualified name (FQN) path for a database column
+   *
+   * This method creates a fully qualified path string for a database column
+   * by combining the schema name, table name, and column name with dot notation.
+   * The resulting path follows the standard database object identification format.
+   *
+   * @param columnInfo - Object containing the schema, table, and column name
+   * @param columnInfo.schema - The database schema name (e.g., 'public')
+   * @param columnInfo.table - The table name containing the column (e.g., 'users')
+   * @param columnInfo.name - The column name (e.g., 'first_name')
+   * @returns The fully qualified path in format 'schema.table.column'
+   *
+   * @example
+   * ```typescript
+   * TableUtils.toFQNPath({schema: 'public', table: 'users', name: 'email'});
+   * // Returns 'public.users.email'
+   *
+   * TableUtils.toFQNPath({schema: 'auth', table: 'accounts', name: 'password'});
+   * // Returns 'auth.accounts.password'
+   * ```
+   */
+  public static toFQNPath(columnInfo: {schema: string; table: string; name: string}): string {
+    return `${columnInfo.schema}.${columnInfo.table}.${columnInfo.name}`;
+  }
 }

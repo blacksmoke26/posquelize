@@ -61,6 +61,9 @@ import type {SequelizeType} from '~/constants/sequelize';
  * ```
  */
 export interface ColumnInfo {
+  /** The name of the schema */
+  schema: string;
+
   /** The name of the table containing this column */
   table: string;
 
@@ -213,6 +216,7 @@ export default abstract class TableColumns {
       }
 
       columnInfos.push({
+        schema: schemaName,
         table: info.table_name,
         name,
         propertyName: camelCase(name),

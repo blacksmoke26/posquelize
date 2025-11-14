@@ -16,8 +16,8 @@
 import fs from 'node:fs';
 
 import merge from 'deepmerge';
-import { rimraf } from 'rimraf';
-import { pascalCase } from 'change-case';
+import {rimraf} from 'rimraf';
+import {pascalCase} from 'change-case';
 
 // helpers
 import FileHelper from '~/helpers/FileHelper';
@@ -27,17 +27,17 @@ import StringHelper from '~/helpers/StringHelper';
 import DbUtils from '~/classes/DbUtils';
 import TemplateWriter from './TemplateWriter';
 import KnexClient from '~/classes/KnexClient';
-import MigrationGenerator, { MigrationOptions } from './MigrationGenerator';
+import MigrationGenerator, {MigrationOptions} from './MigrationGenerator';
 import RelationshipGenerator from './RelationshipGenerator';
-import TableColumns, { type ColumnInfo } from '~/classes/TableColumns';
+import TableColumns, {type ColumnInfo} from '~/classes/TableColumns';
 
 // utils
-import ModelGenerator, { InitTemplateVars, ModelTemplateVars, sp } from './ModelGenerator';
+import ModelGenerator, {InitTemplateVars, ModelTemplateVars, sp} from './ModelGenerator';
 
 // types
-import type { Knex } from 'knex';
-import type { ForeignKey, Relationship, TableIndex } from '~/typings/utils';
-import type { GeneratorOptions } from '~/typings/generator';
+import type {Knex} from 'knex';
+import type {ForeignKey, Relationship, TableIndex} from '~/typings/utils';
+import type {GeneratorOptions} from '~/typings/generator';
 
 /**
  * Generates Sequelize models, migrations, and related files from a database schema.
@@ -73,6 +73,22 @@ export default class PosquelizeGenerator {
    * @see Database connection is established in the constructor
    */
   public knex: Knex;
+  /**
+   * The model generator instance responsible for creating Sequelize model templates.
+   * This instance handles the generation of TypeScript model files, including:
+   * - Field definitions and type annotations
+   * - Interface generation for type safety
+   * - Model attributes and configurations
+   * - Relationship definitions
+   * - Index and constraint generation
+   *
+   * The generator is initialized with merged options and used throughout the
+   * model generation process for each table in the database schema.
+   *
+   * @see ModelGenerator for detailed generation logic
+   * @see getOptions() for configuration options used during initialization
+   */
+  private modelGen: InstanceType<typeof ModelGenerator>;
 
   /**
    * Database metadata including schemas, indexes, relationships, and foreign keys.
@@ -102,6 +118,7 @@ export default class PosquelizeGenerator {
     public readonly options: GeneratorOptions = {},
   ) {
     this.knex = KnexClient.create(this.connectionString);
+    this.modelGen = new ModelGenerator(this.getOptions());
   }
 
   /**
@@ -121,7 +138,8 @@ export default class PosquelizeGenerator {
         generator: {
           model: {
             addNullTypeForNullable: true,
-          }
+          },
+          enums: [],
         },
       },
       this.options,
@@ -187,7 +205,7 @@ export default class PosquelizeGenerator {
    * filterSchemaTables('any_table', 'any_schema') // true (everything allowed)
    * ```
    */
-  private filterSchemaTables (tableName: string, schemaName: string): boolean {
+  private filterSchemaTables(tableName: string, schemaName: string): boolean {
     let hasPassed = true;
 
     const filterSchemas = this.getOptions().schemas;
@@ -298,7 +316,7 @@ export default class PosquelizeGenerator {
     const modelName = this.getModelName(tableName);
 
     this.updateInitializerVars(modelName, initTplVars);
-    const modTplVars = ModelGenerator.getModelTemplateVars({schemaName, modelName, tableName});
+    const modTplVars = this.modelGen.getModelTemplateVars({schemaName, modelName, tableName});
 
     const columnsInfo = await TableColumns.list(this.knex, tableName, schemaName);
     const timestampInfo = this.getTimestampInfo(columnsInfo);
@@ -310,7 +328,7 @@ export default class PosquelizeGenerator {
     this.writeModelFile(modelName, modTplVars);
     this.updateConfig(config, modelName);
 
-    if ( this.getOptions().repositories ) {
+    if (this.getOptions().repositories) {
       TemplateWriter.writeRepoFile(this.getBaseDir(), StringHelper.tableToModel(tableName), this.getOptions().dirname);
     }
   }
@@ -374,17 +392,18 @@ export default class PosquelizeGenerator {
     for (const columnInfo of columnsInfo) {
       const relation = tableData.relations.find((x) => x.source.column === columnInfo.name) ?? null;
 
-      ModelGenerator.generateEnums(columnInfo, modTplVars, modelName);
-      ModelGenerator.generateInterfaces(columnInfo, modTplVars, interfacesVar);
-      ModelGenerator.generateFields({
+      this.modelGen.generateEnums(columnInfo, modTplVars, modelName);
+      this.modelGen.generateConfigurableEnums({columnInfo, vars: modTplVars, modelName});
+
+      this.modelGen.generateInterfaces(columnInfo, modTplVars, interfacesVar);
+      this.modelGen.generateFields({
         columnInfo, vars: modTplVars, modelName,
         targetTable: relation?.target?.table ?? null,
         targetColumn: relation?.target?.column ?? null,
         isFK: relation !== null,
-        generator: this.getOptions().generator,
       });
 
-      ModelGenerator.generateAttributes({columnInfo, modTplVars, tableForeignKeys: tableData.foreignKeys});
+      this.modelGen.generateAttributes({columnInfo, modTplVars, tableForeignKeys: tableData.foreignKeys});
     }
   }
 
@@ -404,9 +423,9 @@ export default class PosquelizeGenerator {
     tableName: string,
     timestampInfo: { hasCreatedAt: boolean; hasUpdatedAt: boolean },
   ): void {
-    ModelGenerator.generateRelationsImports(tableData.relations, modTplVars);
-    ModelGenerator.generateOptions(modTplVars, {schemaName, tableName, ...timestampInfo});
-    ModelGenerator.generateIndexes(tableData.indexes, modTplVars);
+    this.modelGen.generateRelationsImports(tableData.relations, modTplVars);
+    this.modelGen.generateOptions(modTplVars, {schemaName, tableName, ...timestampInfo});
+    this.modelGen.generateIndexes(tableData.indexes, modTplVars);
     RelationshipGenerator.generateAssociations(tableData.relations, modTplVars, tableName);
   }
 
@@ -495,7 +514,7 @@ export default class PosquelizeGenerator {
     });
 
     // Initialize template variables for models and interfaces
-    const initTplVars = ModelGenerator.getInitializerTemplateVars();
+    const initTplVars = this.modelGen.getInitializerTemplateVars();
     const interfacesVar: { text: string } = {
       text: '',
     };
@@ -586,7 +605,7 @@ export default class PosquelizeGenerator {
         outDir: this.getBaseDir('migrations'),
         rootDir: this.rootDir,
         tables: this.getOptions().tables,
-        generate: this.getOptions().migrations as MigrationOptions['generate']
+        generate: this.getOptions().migrations as MigrationOptions['generate'],
       },
     );
 
