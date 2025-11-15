@@ -25,7 +25,7 @@ export default abstract class ConfigCombiner {
    * @param options - Array of objects to merge in order.
    * @returns A new object containing all merged properties with later objects overriding earlier ones.
    */
-  public static mergeAll<T>(...options: T[]): T {
+  public static mergeAll<T>(...options: Partial<T>[]): T {
     let combined = {} as T;
 
     for (const option of options) {
@@ -40,7 +40,7 @@ export default abstract class ConfigCombiner {
    * @param options - Array of generator options to merge in order.
    * @returns A merged GeneratorOptions object combining all provided options.
    */
-  public static withOptions(...options: GeneratorOptions[]): GeneratorOptions {
+  public static withOptions(...options: Partial<GeneratorOptions>[]): GeneratorOptions {
     return this.mergeAll(
       {
         schemas: [],
@@ -77,7 +77,7 @@ export default abstract class ConfigCombiner {
    * @param options - Array of generate config files to merge in order.
    * @returns A merged GenerateConfigFile object combining all provided configurations.
    */
-  public static withFileOptions(...options: GenerateConfigFile[]): GenerateConfigFile {
+  public static withFileOptions(...options: Partial<GenerateConfigFile>[]): GenerateConfigFile {
     return this.mergeAll({
       connection: {
         host: 'localhost',
