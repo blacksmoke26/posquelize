@@ -1,6 +1,22 @@
 
 # ChangeLog
 
+## v0.0.2 - 2025-11-15
+
+### feat
+* Paranoid Mode ([PR-14](https://github.com/blacksmoke26/posquelize/pull/14))
+* Configuration file support `posquelize.config.js` ([PR-13](https://github.com/blacksmoke26/posquelize/pull/13))
+* Enum alternative types (Union / Literal) ([PR-12](https://github.com/blacksmoke26/posquelize/pull/12))
+* Configurable enum for table columns ([PR-11](https://github.com/blacksmoke26/posquelize/pull/11))
+* JSONB Array support ([PR-10](https://github.com/blacksmoke26/posquelize/pull/10))
+* Support nullable type in property declaration ([PR-9](https://github.com/blacksmoke26/posquelize/pull/9))
+
+### enhancements
+
+* Update DB script with new structure, `README` updates. ([PR-15](https://github.com/blacksmoke26/posquelize/pull/15))
+* Replace `babel` dependencies with `ts-node`. ([PR-8](https://github.com/blacksmoke26/posquelize/pull/8))
+* Replace `momentjs` with DateTimeHelper utility methods. ([PR-7](https://github.com/blacksmoke26/posquelize/pull/7))
+
 ## v0.0.1 - 2025-11-12
 
 ### feat
