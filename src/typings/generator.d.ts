@@ -8,8 +8,6 @@
  * repositories, and various output formatting preferences.
  */
 
-import type {MigrationOptions} from '~/core/MigrationGenerator';
-
 /**
  * Configuration options for the generator
  */
@@ -202,7 +200,26 @@ export interface GeneratorOptions {
    * ```
    * @see MigrationGenerator For the underlying migration generation implementation
    */
-  migrations?: MigrationOptions['generate'] | false;
+  migrations?: {
+    /** Generate migration files for table indexes */
+    indexes?: boolean;
+    /** Generate initial seeder files for database records */
+    seeders?: boolean;
+    /** Generate migration files for database functions */
+    functions?: boolean;
+    /** Generate migration files for custom domains */
+    domains?: boolean;
+    /** Generate migration files for composite types */
+    composites?: boolean;
+    /** Generate migration files for table structures */
+    tables?: boolean;
+    /** Generate migration files for database views */
+    views?: boolean;
+    /** Generate migration files for database triggers */
+    triggers?: boolean;
+    /** Generate migration files for foreign key constraints */
+    foreignKeys?: boolean;
+  } | false;
 
   /**
    * Whether to generate Entity Relationship Diagram (ERD) files for the database schema.
