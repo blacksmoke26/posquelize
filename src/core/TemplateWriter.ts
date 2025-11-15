@@ -14,32 +14,45 @@ import NunjucksHelper from '~/helpers/NunjucksHelper';
 import KnexClient from '~/classes/KnexClient';
 import DbmlDiagramExporter from './DbmlDiagramExporter';
 
+// types
+import type {GeneratorOptions} from '~/typings/generator';
+
 /**
- * Options for configuring the behavior of writing base files during scaffold generation.
- * These options control which components are generated and how they are structured.
+ * Configuration options for controlling the generation of base files during scaffold creation.
+ * Determines which components are included in the generated project structure.
  */
 export interface WriteBaseFileOptions {
   /**
-   * Whether to generate the base repo file (RepoBase.ts).
-   * When true, the RepoBase.ts file will be created in the base directory.
+   * Controls the generation of the RepositoryBase.ts file.
+   * When enabled, creates the base repository class in the base directory.
    * @default true
    */
   repoBase?: boolean;
 }
 
 /**
- * Abstract class for scaffold generation utilities.
- * All methods are static and cannot be instantiated.
+ * Utility class for generating template files and scaffolding project components.
+ *
+ * Provides functionality to create various configuration, model, repository, and server files
+ * using Nunjucks templates. Designed to work with database models and repository patterns.
  */
-export default abstract class TemplateWriter {
+export default class TemplateWriter {
   /**
-   * Renders a Nunjucks template and saves the output to a file.
+   * Initializes a new TemplateWriter instance with optional configuration.
    *
-   * @param template - The name of the template file (without extension).
-   * @param outFile - The path where the rendered output will be saved.
-   * @param context - Optional context object containing variables for template rendering.
+   * @param options - Generator configuration options affecting template behavior
    */
-  public static renderOut(template: string, outFile: string, context: Record<string, any> = {}): void {
+  constructor(public readonly options: GeneratorOptions = {}) {
+  }
+
+  /**
+   * Processes a Nunjucks template and persists the rendered output to disk.
+   *
+   * @param template - Base name of the template file (excluding .njk extension)
+   * @param outFile - Target path where the rendered content will be saved
+   * @param context - Data object passed to the template for variable substitution
+   */
+  public renderOut(template: string, outFile: string, context: Record<string, any> = {}): void {
     const templateFile: string = FileHelper.join(FileHelper.dirname(__dirname, 1), 'templates', `${template}.njk`);
     const text = NunjucksHelper.renderFile(templateFile, context, {
       autoescape: false,
@@ -48,47 +61,54 @@ export default abstract class TemplateWriter {
   }
 
   /**
-   * Writes database diagrams in DBML format and generates a README file.
-   * Connects to the database using the connection string from environment variables,
-   * exports the schema as a DBML file, and creates a README with documentation.
+   * Generates database schema documentation in DBML (Database Markup Language) format.
    *
-   * @param {string} outputDir - The directory path where the diagram files will be written.
-   * @param {string} connectionString - Database connection string
-   * @returns {Promise<void>}
+   * Establishes database connection using the provided connection string, extracts schema metadata,
+   * and exports it as a DBML file for documentation purposes.
+   *
+   * @param outputDir - Destination directory for the generated DBML file
+   * @param connectionString - Complete database connection URI
+   * @returns Promise resolving when schema export completes
    */
-  public static async writeDiagrams(outputDir: string, connectionString: string): Promise<void> {
+  public async writeDiagrams(outputDir: string, connectionString: string): Promise<void> {
     // Export database schema to DBML format
-    await DbmlDiagramExporter.export(connectionString, FileHelper.join(outputDir, 'database.dbml'));
+    await DbmlDiagramExporter.create(this.options).export(connectionString, FileHelper.join(outputDir, 'database.dbml'));
   }
 
   /**
-   * Writes base files required for the scaffold generation.
+   * Generates essential base files for project scaffolding.
    *
-   * This method generates essential base files for a project scaffold, including:
-   * - ModelBase.ts (if repoBase option is enabled)
-   * - RepositoryBase.ts
-   * - instance.ts
-   * - Configuration files (config.js, .env, tsconfig.json, .sequelizerc)
-   * - Project setup files (package.json, .gitignore, README.md)
+   * Creates a comprehensive set of foundation files including base classes, configuration files,
+   * and project metadata. The generated files provide the structure for a database-driven application
+   * with repository and model patterns.
    *
-   * @param {string} baseDir - The base directory path where the repositories folder is located.
-   * @param {string} mainDir - The main directory name where files will be placed.
-   * @param {string} connectionString - The database connection string used for configuration.
-   * @param {WriteBaseFileOptions} options - Optional configuration for controlling which files are generated.
-   *   @property {boolean} [repoBase=true] - Whether to generate the RepoBase.ts file.
+   * Generated files include:
+   * - Base model and repository classes
+   * - Application instance configuration
+   * - Database connection and environment settings
+   * - TypeScript and Sequelize configuration
+   * - Package management and version control files
+   *
+   * @param baseDir - Root directory containing the repositories folder
+   * @param mainDir - Target directory name for generated source files
+   * @param connectionString - Database connection string for configuration
+   * @param options - Optional settings to control file generation behavior
+   *   @property repoBase - Flag to enable/disable RepositoryBase.ts generation
    *
    * @example
-   * // Basic usage with default options
-   * TemplateWriter.writeBaseFiles('/path/to/project', 'src', 'postgresql://user:pass@localhost:5432/db');
+   * // Generate all base files with default settings
+   * const writer = new TemplateWriter();
+   * writer.writeBaseFiles('/project/path', 'src', 'postgresql://user:pass@localhost:5432/dbname');
    *
    * @example
-   * // Custom options
-   * TemplateWriter.writeBaseFiles('/path/to/project', 'src', 'postgresql://user:pass@localhost:5432/db', {
+   * // Generate without repository base class
+   * const writer = new TemplateWriter();
+   * writer.writeBaseFiles('/project/path', 'src', 'postgresql://user:pass@localhost:5432/dbname', {
    *   repoBase: false
    * });
    */
-  public static writeBaseFiles(baseDir: string, mainDir: string, connectionString: string, options: WriteBaseFileOptions = {}): void {
-    const newOptions = merge<Required<WriteBaseFileOptions>>({ repoBase: true }, options);
+  public writeBaseFiles(baseDir: string, mainDir: string, connectionString: string, options: WriteBaseFileOptions = {}): void {
+    const newOptions = merge<Required<WriteBaseFileOptions>>({repoBase: true}, options);
 
     if (newOptions.repoBase) {
       // Generate RepositoryBase.ts from template
@@ -106,7 +126,7 @@ export default abstract class TemplateWriter {
 
     const rootPath = FileHelper.dirname(baseDir, 2);
 
-    // Generate ModelBase.ts from template
+    // Generate environment configuration
     this.renderOut('core/env', FileHelper.join(rootPath, '.env'), KnexClient.connectionStringToDbConfig(connectionString));
     this.renderOut('core/tsconfig.json', FileHelper.join(rootPath, 'tsconfig.json'));
     this.renderOut('core/sequelize-rc', FileHelper.join(rootPath, '.sequelizerc'), {dirname: mainDir});
@@ -116,22 +136,32 @@ export default abstract class TemplateWriter {
   }
 
   /**
-   * Generates and writes a repository file for the given model name.
-   * This function generates a repository file for the given model name using a template.
-   * It renders the repository template with the provided model name and saves it to the
-   * repositories directory.
+   * Creates a repository implementation file for a specified model.
    *
-   * @param {string} baseDir - The base directory path where the repositories folder is located.
-   * @param {string} modelName - The name of the model to generate the repository for.
-   * @param {string} mainDir - The main directory name files placed in.
+   * Processes the repository template with the provided model name and outputs
+   * a TypeScript file containing the repository class definition in the repositories directory.
+   *
+   * @param baseDir - Path to the directory containing the repositories folder
+   * @param modelName - Name of the model for which to create the repository
+   * @param mainDir - Directory name where source files are organized
    */
-  public static writeRepoFile(baseDir: string, modelName: string, mainDir: string): void {
+  public writeRepoFile(baseDir: string, modelName: string, mainDir: string): void {
     const fileName = FileHelper.join(baseDir, 'repositories', `${modelName}Repository.ts`);
     this.renderOut('repo-template', fileName, {modelName, dirname: mainDir});
     console.log('Repository generated:', fileName);
   }
 
-  public static writeServerFile(baseDir: string, modelName: string, mainDir: string): void {
+  /**
+   * Generates a server configuration file for a specific model.
+   *
+   * Creates a TypeScript server file configured to work with the specified model,
+   * including necessary imports and basic setup for API endpoints.
+   *
+   * @param baseDir - Target directory for the generated server file
+   * @param modelName - Model identifier to be referenced in server configuration
+   * @param mainDir - Root directory name for source organization
+   */
+  public writeServerFile(baseDir: string, modelName: string, mainDir: string): void {
     this.renderOut('core/server', FileHelper.join(baseDir, `server.ts`), {model: modelName, dirname: mainDir});
   }
 }
