@@ -16,6 +16,8 @@ Posquelize is a powerful CLI tool that automates the generation of Sequelize app
   tables, functions, domains, views, triggers, indexes, and keys
 - 📊 **Advanced Type Support**: Handles custom user-defined types
   with automatic conversions
+- 📚 **Multi-Schema Support**: Seamlessly handle multiple database
+  schemas with efficient processing and organization.
 - ⚡ **Visual Documentation**: Creates database ER diagrams in DBML
 - 🚀 **Selective Generation**: Filter by schemas or tables for
   targeted code generation
@@ -43,7 +45,7 @@ Posquelize is a powerful CLI tool that automates the generation of Sequelize app
 - 🧹 **Clean Generation**: Automatic directory cleanup with `--clean`
 - 🎨 **Template Customization**: Support for custom output templates *(upcoming)*
 - ⚙️ **Configuration Files**: Advanced configuration via
-  posquelize.config.js for complex setups
+  `posquelize.config.js` for complex setups
 - 🚀 **Programmatic API**: Full TypeScript API for integration into
   build pipelines and custom tools
 
@@ -52,7 +54,9 @@ Posquelize is a powerful CLI tool that automates the generation of Sequelize app
 ### Installation
 
 ```bash
-npm install -g posquelize
+npm install -g posquelize   # for NPM
+pnpm add -g posquelize      # for PNPM
+yarn global add posquelize  # for Yarn
 ```
 
 ### Basic Usage
@@ -83,12 +87,12 @@ posquelize --help
 |--------------------------------|------------------------------------------------------------------------|-------------|
 | 🌐 `-h, --host <address>`      | IP/Hostname for the database                                           | `localhost` |
 | 🔌 `-p, --port <port>`         | Database connection port                                               | `5432`      |
-| 📑 `--use-config`              | Load `posquelize.config.js` configuration file from current directory. | `false`     |
 | 📁 `-o, --output <directory>`  | Output directory path                                                  | `./myapp`   |
 | 📂 `-n, --dirname <directory>` | Sequelize subdirectory name                                            | `database`  |
-| 🧹 `--clean`                   | Clean output directory before generation                               | `false`     |
-| 🏗️ `--schemas <schemas>`      | Specific schemas to process (comma-separated)                          | -           |
+| ⚙️ `--use-config`              | Load `posquelize.config.js` configuration file from current directory. | `false`     |
+| 📚 `--schemas <schemas>`      | Specific schemas to process (comma-separated)                          | -           |
 | 📋 `--tables <tables>`         | Specific tables to generate (comma-separated)                          | -           |
+| 🧹 `--clean`                   | Clean output directory before generation                               | `false`     |
 | 📊 `--no-diagram`              | Skip [DBML](https://dbml.dbdiagram.io/) ER diagram generation          | `false`     |
 | 📋 `--no-migrations`           | Skip migration files generation                                        | `false`     |
 | 📦 `--no-repositories`         | Skip repository files generation                                       | `false`     |
