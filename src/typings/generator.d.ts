@@ -272,6 +272,9 @@ export interface GeneratorOptions {
    * ```
    */
   repositories?: boolean;
+
+  // Path to directory containing custom templates for code generation
+  templatesDir?: string;
 }
 
 /** Configuration file for generator  */
@@ -292,7 +295,4 @@ export interface GenerateConfigFile extends GeneratorOptions {
 
   /** Output directory where generated files will be placed */
   outputDir?: string;
-
-  // Path to directory containing custom templates for code generation
-  templatesDir?: string;
 }
