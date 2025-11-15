@@ -83,21 +83,22 @@ posquelize --help
 
 ### Optional Parameters
 
-| Option                         | Description                                                            | Default     |
-|--------------------------------|------------------------------------------------------------------------|-------------|
-| 🌐 `-h, --host <address>`      | IP/Hostname for the database                                           | `localhost` |
-| 🔌 `-p, --port <port>`         | Database connection port                                               | `5432`      |
-| 📁 `-o, --output <directory>`  | Output directory path                                                  | `./myapp`   |
-| 📂 `-n, --dirname <directory>` | Sequelize subdirectory name                                            | `database`  |
-| ⚙️ `--use-config`              | Load `posquelize.config.js` configuration file from current directory. | `false`     |
-| 📚 `--schemas <schemas>`      | Specific schemas to process (comma-separated)                          | -           |
-| 📋 `--tables <tables>`         | Specific tables to generate (comma-separated)                          | -           |
-| 🧹 `--clean`                   | Clean output directory before generation                               | `false`     |
-| 📊 `--no-diagram`              | Skip [DBML](https://dbml.dbdiagram.io/) ER diagram generation          | `false`     |
-| 📋 `--no-migrations`           | Skip migration files generation                                        | `false`     |
-| 📦 `--no-repositories`         | Skip repository files generation                                       | `false`     |
-| 🏷️ `--no-enums`               | Use alternative types (`literal` / `union`) instead of `enum`          | `false`     |
-| 📋 `--no-null-type`            | Omit `null` in type declaration for nullable column                    | `false`     |
+| Option                         | Description                                                              | Default     |
+|--------------------------------|--------------------------------------------------------------------------|-------------|
+| 🌐 `-h, --host <address>`      | IP/Hostname for the database                                             | `localhost` |
+| 🔌 `-p, --port <port>`         | Database connection port                                                 | `5432`      |
+| 📁 `-o, --output <directory>`  | Output directory path                                                    | `./myapp`   |
+| 📂 `-n, --dirname <directory>` | Sequelize subdirectory name                                              | `database`  |
+| ⚙️ `--use-config`              | Load `posquelize.config.js` configuration file from current directory.   | `false`     |
+| 📚 `--schemas <schemas>`       | Specific schemas to process (comma-separated)                            | -           |
+| 📋 `--tables <tables>`         | Specific tables to generate (comma-separated)                            | -           |
+| 🧹 `--clean`                   | Clean output directory before generation                                 | `false`     |
+| 📊 `--no-diagram`              | Skip [DBML](https://dbml.dbdiagram.io/) ER diagram generation            | `false`     |
+| 📋 `--no-migrations`           | Skip migration files generation                                          | `false`     |
+| 📦 `--no-repositories`         | Skip repository files generation                                         | `false`     |
+| 🏷️ `--no-enums`               | Use alternative types (`literal` / `union`) instead of `enum`            | `false`     |
+| 📋 `--no-null-type`            | Omit `null` in type declaration for nullable column                      | `false`     |
+| 🎨 `--extract-templates`       | Extract template files into the current directory for customization | `false`     |
 
 ## Usage Examples
 
@@ -231,6 +232,9 @@ module.exports = {
       // defaultValue: 'private', // Default Value is set in DDL
     }],
   },
+  
+  // Path to directory containing custom templates for code generation
+  templatesDir: __dirname + '/templates',
 };
 ```
 

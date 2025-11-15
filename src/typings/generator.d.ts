@@ -291,5 +291,8 @@ export interface GenerateConfigFile extends GeneratorOptions {
   };
 
   /** Output directory where generated files will be placed */
-  outputDir: string;
+  outputDir?: string;
+
+  // Path to directory containing custom templates for code generation
+  templatesDir?: string;
 }
