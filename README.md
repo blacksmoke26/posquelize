@@ -31,8 +31,8 @@ Posquelize is a powerful CLI tool that automates the generation of Sequelize app
   including timestamps, paranoid mode
 - 🔧 **Advanced Migration Control**: Granular control over migration
   generation with selective inclusion/exclusion options
-- 📋 **JSON Schema Support**: Generates JSON schemas for validation
-  and API documentation
+- 📋 **JSON/JSONB Support**: Automatically detects and generates TypeScript interfaces from
+  column defaults or values, ensuring proper type safety for structured data.
 - 🏗️ **Composite Type Handling**: Support for PostgreSQL composite
   types with automatic TypeScript interface generation
 
@@ -83,21 +83,22 @@ posquelize --help
 
 ### Optional Parameters
 
-| Option                         | Description                                                            | Default     |
-|--------------------------------|------------------------------------------------------------------------|-------------|
-| 🌐 `-h, --host <address>`      | IP/Hostname for the database                                           | `localhost` |
-| 🔌 `-p, --port <port>`         | Database connection port                                               | `5432`      |
-| 📁 `-o, --output <directory>`  | Output directory path                                                  | `./myapp`   |
-| 📂 `-n, --dirname <directory>` | Sequelize subdirectory name                                            | `database`  |
-| ⚙️ `--use-config`              | Load `posquelize.config.js` configuration file from current directory. | `false`     |
-| 📚 `--schemas <schemas>`      | Specific schemas to process (comma-separated)                          | -           |
-| 📋 `--tables <tables>`         | Specific tables to generate (comma-separated)                          | -           |
-| 🧹 `--clean`                   | Clean output directory before generation                               | `false`     |
-| 📊 `--no-diagram`              | Skip [DBML](https://dbml.dbdiagram.io/) ER diagram generation          | `false`     |
-| 📋 `--no-migrations`           | Skip migration files generation                                        | `false`     |
-| 📦 `--no-repositories`         | Skip repository files generation                                       | `false`     |
-| 🏷️ `--no-enums`               | Use alternative types (`literal` / `union`) instead of `enum`          | `false`     |
-| 📋 `--no-null-type`            | Omit `null` in type declaration for nullable column                    | `false`     |
+| Option                         | Description                                                              | Default     |
+|--------------------------------|--------------------------------------------------------------------------|-------------|
+| 🌐 `-h, --host <address>`      | IP/Hostname for the database                                             | `localhost` |
+| 🔌 `-p, --port <port>`         | Database connection port                                                 | `5432`      |
+| 📁 `-o, --output <directory>`  | Output directory path                                                    | `./myapp`   |
+| 📂 `-n, --dirname <directory>` | Sequelize subdirectory name                                              | `database`  |
+| ⚙️ `--use-config`              | Load `posquelize.config.js` configuration file from current directory.   | `false`     |
+| 📚 `--schemas <schemas>`       | Specific schemas to process (comma-separated)                            | -           |
+| 📋 `--tables <tables>`         | Specific tables to generate (comma-separated)                            | -           |
+| 🧹 `--clean`                   | Clean output directory before generation                                 | `false`     |
+| 📊 `--no-diagram`              | Skip [DBML](https://dbml.dbdiagram.io/) ER diagram generation            | `false`     |
+| 📋 `--no-migrations`           | Skip migration files generation                                          | `false`     |
+| 📦 `--no-repositories`         | Skip repository files generation                                         | `false`     |
+| 🏷️ `--no-enums`               | Use alternative types (`literal` / `union`) instead of `enum`            | `false`     |
+| 📋 `--no-null-type`            | Omit `null` in type declaration for nullable column                      | `false`     |
+| 🎨 `--extract-templates`       | Extract template files into the current directory for customization | `false`     |
 
 ## Usage Examples
 
@@ -140,31 +141,41 @@ The tool generates a complete application structure with:
 - **Repository Pattern**: Abstraction layer for data access
 
 ```text
-myapp/
-│   📄 .env                  # Environment variables
-│   📄 .gitignore            # Git ignore rules
-│   ⚙️ .sequelizerc          # Sequelize configuration
-│   📦 package.json          # Dependencies and scripts
-│   📖 README.md             # Project documentation
-│   ⚙️ tsconfig.json         # TypeScript configuration
+<output-directory>/
+│   📄 .env                                          # Environment variables
+│   📄 .gitignore                                    # Git ignore rules
+│   ⚙️ .sequelizerc                                  # Sequelize configuration
+│   📦 package.json                                  # Dependencies and scripts
+│   📖 README.md                                     # Project documentation
+│   ⚙️ tsconfig.json                                 # TypeScript configuration
 └───src/
-    │   🚀 server.ts         # Application entry point
-    └───database/            # Sequelize directory
-        │    🔗 instance.ts  # Database connection
-        ├───base/            # Base classes
-        │    📝 ModelBase.ts
-        │    📝 RepositoryBase.ts
-        ├───config/          # Configuration files
-        │    ⚙️ config.js
-        ├───diagrams/        # Database documentation
-        │    📊 database.dbml
-        │    📖 README.md
-        ├───migrations/      # Database migrations
-        ├───models/          # Generated models
-        ├───repositories/    # Generated repositories
-        ├───seeders/         # Database seeders
-        └───typings/         # Type definitions
-             📝 models.d.ts
+    │   🚀 server.ts                                 # Application entry point
+    └───<sequelize-directory>/                        # Default to `database`
+        │    🔗 instance.ts                          # Database connection
+        ├───base/                                     # Base classes
+        │   ├── 📝 ModelBase.ts
+        │   └── 📝 RepositoryBase.ts
+        ├───config/                                  # Configuration files
+        │   └── ⚙️ config.js
+        ├───diagrams/                                # Database documentation
+        │   ├── 📊 database.dbml
+        │   └── 📖 README.md
+        ├── models/                                  # Sequelize model files
+        │   ├── 📝 User.ts
+        │   ├── 📝 Post.ts
+        │   └── ...                                  # Generated model files
+        ├── migrations/                              # Sequelize migration files
+        │   ├── 📝 20251101000000-create-users.js
+        │   ├── 📝 20251101000001-create-posts.js
+        │   └── ...                                  # Generated migration files
+        ├── repositories/                            # Repository pattern implementations
+        │   ├── 📝 UserRepository.ts
+        │   ├── 📝 PostRepository.ts
+        │   └── ...                                  # Generated repository files
+        ├── types/                                   # TypeScript type definitions
+        ├───seeders/                                 # Database seeders
+        └───typings/                                 # Type definitions
+            └──📝 models.d.ts
 ```
 
 ## Configuration File
@@ -231,6 +242,9 @@ module.exports = {
       // defaultValue: 'private', // Default Value is set in DDL
     }],
   },
+  
+  // Path to directory containing custom templates for code generation
+  templatesDir: __dirname + '/templates',
 };
 ```
 

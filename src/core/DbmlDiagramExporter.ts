@@ -7,8 +7,8 @@
 import * as fs from 'node:fs';
 import path, {dirname} from 'node:path';
 
-import { importer } from '@dbml/core';
-import { connector } from '@dbml/connector';
+import {importer} from '@dbml/core';
+import {connector} from '@dbml/connector';
 
 // helpers
 import FileHelper from '~/helpers/FileHelper';
@@ -16,10 +16,32 @@ import FileHelper from '~/helpers/FileHelper';
 // utils
 import TemplateWriter from './TemplateWriter';
 
+// types
+import type {GeneratorOptions} from '~/typings/generator';
+
 /**
- * Exports a database schema to a DBML (Database Markup Language) diagram file.
+ * A class for exporting database schemas to DBML (Database Markup Language) diagram files.
+ * Provides functionality to connect to a PostgreSQL database, fetch its schema,
+ * generate DBML content, and save it to a file along with a README.
  */
-export default abstract class DbmlDiagramExporter {
+export default class DbmlDiagramExporter {
+  /**
+   * Creates a new instance of DbmlDiagramExporter with optional configuration.
+   * @param options - Optional configuration settings for the exporter
+   */
+  private constructor(public readonly options: GeneratorOptions = {}) {
+  }
+
+  /**
+   * Factory method to create a new DbmlDiagramExporter instance.
+   *
+   * @param options - Optional configuration settings for the exporter
+   * @returns A new DbmlDiagramExporter instance
+   */
+  public static create(options: GeneratorOptions = {}): DbmlDiagramExporter {
+    return new DbmlDiagramExporter(options);
+  }
+
   /**
    * Exports a database schema to a DBML (Database Markup Language) diagram file.
    *
@@ -38,7 +60,7 @@ export default abstract class DbmlDiagramExporter {
    * );
    * ```
    */
-  public static async export(connectionString: string, outputFile: string): Promise<void> {
+  public async export(connectionString: string, outputFile: string): Promise<void> {
     try {
       // Fetch database schema with explicit type assertion
       const schemaJson = await connector.fetchSchemaJson(connectionString, 'postgres');
@@ -60,13 +82,15 @@ export default abstract class DbmlDiagramExporter {
       // Ensure output directory exists
       const outputDir = dirname(outputFile);
       if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir, { recursive: true });
+        fs.mkdirSync(outputDir, {recursive: true});
       }
 
       FileHelper.saveTextToFile(outputFile, output);
 
       // Generate README content for the diagram
-      TemplateWriter.renderOut('dbml-readme', `${path.dirname(outputFile)}/README.md`, {filename: path.basename(outputFile)})
+      (new TemplateWriter(this.options)).renderOut('dbml-readme', `${path.dirname(outputFile)}/README.md`, {
+        filename: path.basename(outputFile),
+      });
 
       console.log(`Successfully exported DBML diagram to ${outputFile}`);
     } catch (error: any) {

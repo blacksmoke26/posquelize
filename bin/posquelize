@@ -78,6 +78,10 @@ const argv = yargs(hideBin(process.argv))
     description: 'Tables name to be included only (separated by commas)',
     type: 'string',
   })
+  .option('extract-templates', {
+    description: 'Extract and copy templates into the current directory',
+    type: 'boolean',
+  })
   .option('no-diagram', {
     description: 'Do not generate ER diagram of the database.',
     type: 'boolean',
@@ -101,11 +105,12 @@ const argv = yargs(hideBin(process.argv))
   .default({
     host: 'localhost',
     port: 5432,
-    clean: false,
     output: 'myapp',
-    'use-config': false,
     dirname: 'database',
+    clean: false,
+    'use-config': false,
     'no-diagram': false,
+    'extract-templates': false,
     'no-migrations': false,
     'no-enums': false,
     'no-null-type': false,
@@ -136,15 +141,30 @@ async function readPassword () {
 (async function () {
   console.log(await figlet.text('Posquelize', { font: 'Slant' }) + `\n\n`);
 
+  if (argv['extract-templates']) {
+    const destDir = path.normalize(process.cwd() + '/templates')
+    const srcDir = path.normalize(__dirname + '/../lib/templates');
+
+    if (!fs.existsSync(destDir)) fs.mkdirSync(destDir);
+
+    try {
+      fs.cpSync(srcDir, destDir, {recursive: true});
+      console.log('Notice: Templates has been copied to `/templates` directory.');
+    } catch (e) {
+      console.log('Failed to copy templates due to ' + e.message);
+    }
+    return;
+  }
+
   if (argv['use-config']) {
     const generator = await PosquelizeGenerator.createWithConfig(process.cwd());
-    if ( !generator ) return;
+    if (!generator) return;
 
     await generator.generate();
     process.exit(1);
   }
 
-  if ( !argv['user'] || !argv['database'] || !argv['pass']) {
+  if (!argv['user'] || !argv['database'] || !argv['pass']) {
     console.log(`Missing required flags: --user, --password  and --database.`);
     process.exit(1);
   }

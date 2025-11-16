@@ -28,23 +28,28 @@
  */
 
 import path from 'node:path';
-import { format } from 'sql-formatter';
-import { snakeCase } from 'change-case';
+import {snakeCase} from 'change-case';
 
 // classes
-import DbMigrator from '~/classes/DbMigrator';
 import TypeUtils from '~/classes/TypeUtils';
-
-// utils
-import { sp } from './ModelGenerator';
+import DbMigrator from '~/classes/DbMigrator';
 import TemplateWriter from './TemplateWriter';
 
-// types
-import type { Knex } from 'knex';
-import type { ForeignKey, TableIndex } from '~/typings/utils';
-import type { ColumnInfo } from '~/classes/TableColumns';
-import type { MigrationConfig } from './MigrationGenerator';
+// helpers
 import DateTimeHelper from '~/helpers/DateTimeHelper';
+
+// formatters
+import MigrationFormatter from '~/formatters/MigrationFormatter';
+
+// utils
+import {sp} from './ModelGenerator';
+
+// types
+import type {Knex} from 'knex';
+import type {ColumnInfo} from '~/classes/TableColumns';
+import type {MigrationConfig} from './MigrationGenerator';
+import type {GeneratorOptions} from '~/typings/generator';
+import type {ForeignKey, TableIndex} from '~/typings/utils';
 
 /**
  * Abstract utility class providing comprehensive database migration generation capabilities.
@@ -58,60 +63,8 @@ import DateTimeHelper from '~/helpers/DateTimeHelper';
  *
  * @abstract This class cannot be instantiated directly as all methods are static utilities
  */
-export default abstract class MigrationUtils {
-  /**
-   * Escapes single quotes in a string by replacing them with escaped versions.
-   * This is useful when constructing SQL queries where string values need to be properly escaped.
-   * @param str - The input string to escape single quotes from
-   * @returns The string with all single quotes escaped with backslashes
-   * @example
-   * ```typescript
-   * MigrationUtils.escape("O'Reilly") // Returns "O\\'Reilly"
-   * ```
-   */
-  public static escape(str: string): string {
-    return str.replaceAll(`'`, `\\'`);
-  }
-
-  /**
-   * Formats a SQL string with proper indentation and SQL keyword casing.
-   * Uses sql-formatter to standardize the SQL appearance with PostgreSQL dialect.
-   * @param sql - The raw SQL string to format
-   * @returns The formatted SQL string with proper indentation and uppercase keywords
-   * @example
-   * ```typescript
-   * MigrationUtils.formatSQL("select * from users where id=1")
-   * // Returns formatted SQL with proper indentation
-   * ```
-   */
-  public static formatSQL(sql: string): string {
-    return format(sql, {
-      language: 'postgresql',
-      tabWidth: 2,
-      keywordCase: 'upper',
-      linesBetweenQueries: 2,
-      useTabs: false,
-    }).replace(/^./gim, (s) => {
-      return sp(4) + s;
-    });
-  }
-
-  /**
-   * Initializes a migration variables object containing empty strings for up and down migrations.
-   * This provides a standardized structure for building migration content.
-   * @returns An object with empty `up` and `down` properties ready to be populated with migration code
-   * @example
-   * ```typescript
-   * const vars = MigrationUtils.initVariables();
-   * // vars.up = ""
-   * // vars.down = ""
-   * ```
-   */
-  public static initVariables(): { up: string; down: string } {
-    return {
-      up: '',
-      down: '',
-    };
+export default class MigrationHandler {
+  constructor(public readonly writer: TemplateWriter, public readonly options: GeneratorOptions = {}) {
   }
 
   /**
@@ -127,7 +80,7 @@ export default abstract class MigrationUtils {
    * // Returns "/migrations/1234567890-create_users.js"
    * ```
    */
-  public static createFilename(outDir: string, fileName: string, timestamp: number | null = null) {
+  public createFilename(outDir: string, fileName: string, timestamp: number | null = null) {
     return path.normalize(`${outDir}/${timestamp || DateTimeHelper.getTimestamp()}-${snakeCase(fileName)}.js`);
   }
 
@@ -145,8 +98,8 @@ export default abstract class MigrationUtils {
    * });
    * ```
    */
-  public static createFile(fileName: string, variables: { up: string; down: string }): void {
-    TemplateWriter.renderOut('migration-template', fileName, {
+  public createFile(fileName: string, variables: { up: string; down: string }): void {
+    this.writer.renderOut('migration-template', fileName, {
       up: variables.up?.trimEnd(),
       down: variables.down?.trimEnd(),
     });
@@ -164,7 +117,7 @@ export default abstract class MigrationUtils {
    * // Returns "CREATE TABLE users..."
    * ```
    */
-  private static processSQLDefinition(sql: string, schemas: readonly string[]): string {
+  private processSQLDefinition(sql: string, schemas: readonly string[]): string {
     let processedSql = sql.trim();
     schemas.forEach((schema) => {
       processedSql = processedSql.replaceAll(`${schema}.`, '');
@@ -187,10 +140,10 @@ export default abstract class MigrationUtils {
    * // Returns { up: "...create query...", down: "...drop query..." }
    * ```
    */
-  private static generateObjectMigrationVars(sql: string, dropStatement: string): { up: string; down: string } {
-    const vars = MigrationUtils.initVariables();
+  private generateObjectMigrationVars(sql: string, dropStatement: string): { up: string; down: string } {
+    const vars = MigrationFormatter.initVariables();
     vars.up += sp(2, `await queryInterface.sequelize.query(\`\n`);
-    vars.up += sp(0, MigrationUtils.formatSQL(sql) + `\n`);
+    vars.up += sp(0, MigrationFormatter.formatSQL(sql) + `\n`);
     vars.up += sp(2, '`);');
 
     vars.down += sp(2, `await queryInterface.sequelize.query(\`\n`);
@@ -213,15 +166,15 @@ export default abstract class MigrationUtils {
    * // Creates migration files like: 1234567890-create_public_calculate_age_function.js
    * ```
    */
-  public static async generateFunctions(knex: Knex, schemas: readonly string[], config: MigrationConfig): Promise<void> {
+  public async generateFunctions(knex: Knex, schemas: readonly string[], config: MigrationConfig): Promise<void> {
     const list = await DbMigrator.getFunctions(knex, schemas);
 
     for (const data of list) {
-      const sql = MigrationUtils.processSQLDefinition(data.definition, schemas);
-      const vars = MigrationUtils.generateObjectMigrationVars(sql, `DROP FUNCTION ${data.name}`);
+      const sql = this.processSQLDefinition(data.definition, schemas);
+      const vars = this.generateObjectMigrationVars(sql, `DROP FUNCTION ${data.name}`);
 
-      const fileName = MigrationUtils.createFilename(config.outDir, `create_${data.schema}_${data.name}_function`, config.getTime());
-      MigrationUtils.createFile(fileName, vars);
+      const fileName = this.createFilename(config.outDir, `create_${data.schema}_${data.name}_function`, config.getTime());
+      this.createFile(fileName, vars);
       console.log('Generated function migration:', fileName);
     }
   }
@@ -239,15 +192,15 @@ export default abstract class MigrationUtils {
    * // Creates migration files like: 1234567890-create_public_email_domain.js
    * ```
    */
-  public static async generateDomains(knex: Knex, schemas: readonly string[], config: MigrationConfig): Promise<void> {
+  public async generateDomains(knex: Knex, schemas: readonly string[], config: MigrationConfig): Promise<void> {
     const list = await DbMigrator.getDomains(knex, schemas);
 
     for (const data of list) {
-      const sql = MigrationUtils.processSQLDefinition(data.definition, schemas);
-      const vars = MigrationUtils.generateObjectMigrationVars(sql, `DROP DOMAIN ${data.name}`);
+      const sql = this.processSQLDefinition(data.definition, schemas);
+      const vars = this.generateObjectMigrationVars(sql, `DROP DOMAIN ${data.name}`);
 
-      const fileName = MigrationUtils.createFilename(config.outDir, `create_${data.schema}_${data.name}_domain`, config.getTime());
-      MigrationUtils.createFile(fileName, vars);
+      const fileName = this.createFilename(config.outDir, `create_${data.schema}_${data.name}_domain`, config.getTime());
+      this.createFile(fileName, vars);
       console.log('Generated domain migration:', fileName);
     }
   }
@@ -264,14 +217,14 @@ export default abstract class MigrationUtils {
    * // Creates migration file: 1234567890-create_indexes.js
    * ```
    */
-  public static async generateIndexes(indexes: TableIndex[], config: MigrationConfig): Promise<void> {
+  public async generateIndexes(indexes: TableIndex[], config: MigrationConfig): Promise<void> {
     const filteredIndexes = indexes.filter((x) => x.constraint !== 'PRIMARY KEY');
-    const vars = MigrationUtils.initVariables();
-    MigrationUtils.generateCreateIndexes(filteredIndexes, vars);
-    MigrationUtils.generateRemoveIndexes(filteredIndexes, vars);
+    const vars = MigrationFormatter.initVariables();
+    this.generateCreateIndexes(filteredIndexes, vars);
+    this.generateRemoveIndexes(filteredIndexes, vars);
 
-    const fileName = MigrationUtils.createFilename(config.outDir, `create_indexes`, config.getTime());
-    MigrationUtils.createFile(fileName, vars);
+    const fileName = this.createFilename(config.outDir, `create_indexes`, config.getTime());
+    this.createFile(fileName, vars);
     console.log('Generated indexes migration:', fileName);
   }
 
@@ -288,15 +241,15 @@ export default abstract class MigrationUtils {
    * // Creates migration files like: 1234567890-create_public_audit_trigger.js
    * ```
    */
-  public static async generateTriggers(knex: Knex, schemas: readonly string[], config: MigrationConfig): Promise<void> {
+  public async generateTriggers(knex: Knex, schemas: readonly string[], config: MigrationConfig): Promise<void> {
     const list = await DbMigrator.getTriggers(knex, schemas);
 
     for (const data of list) {
-      const sql = MigrationUtils.processSQLDefinition(data.definition, schemas);
-      const vars = MigrationUtils.generateObjectMigrationVars(sql, `DROP TRIGGER ${data.name}`);
+      const sql = this.processSQLDefinition(data.definition, schemas);
+      const vars = this.generateObjectMigrationVars(sql, `DROP TRIGGER ${data.name}`);
 
-      const fileName = MigrationUtils.createFilename(config.outDir, `create_${data.schema}_${data.name}_trigger`, config.getTime());
-      MigrationUtils.createFile(fileName, vars);
+      const fileName = this.createFilename(config.outDir, `create_${data.schema}_${data.name}_trigger`, config.getTime());
+      this.createFile(fileName, vars);
       console.log('Generated trigger migration:', fileName);
     }
   }
@@ -314,15 +267,15 @@ export default abstract class MigrationUtils {
    * // Creates migration files like: 1234567890-create_public_address_composite.js
    * ```
    */
-  public static async generateComposites(knex: Knex, schemas: readonly string[], config: MigrationConfig): Promise<void> {
+  public async generateComposites(knex: Knex, schemas: readonly string[], config: MigrationConfig): Promise<void> {
     const list = await DbMigrator.getComposites(knex, schemas);
 
     for (const data of list) {
-      const sql = MigrationUtils.processSQLDefinition(data.definition, schemas);
-      const vars = MigrationUtils.generateObjectMigrationVars(sql, `DROP TYPE ${data.name}`);
+      const sql = this.processSQLDefinition(data.definition, schemas);
+      const vars = this.generateObjectMigrationVars(sql, `DROP TYPE ${data.name}`);
 
-      const fileName = MigrationUtils.createFilename(config.outDir, `create_${data.schema}_${data.name}_composite`, config.getTime());
-      MigrationUtils.createFile(fileName, vars);
+      const fileName = this.createFilename(config.outDir, `create_${data.schema}_${data.name}_composite`, config.getTime());
+      this.createFile(fileName, vars);
       console.log('Generated composite migration:', fileName);
     }
   }
@@ -340,16 +293,16 @@ export default abstract class MigrationUtils {
    * // Creates migration files like: 1234567890-create_public_user_summary_view.js
    * ```
    */
-  public static async generateViews(knex: Knex, schemas: readonly string[], config: MigrationConfig): Promise<void> {
+  public async generateViews(knex: Knex, schemas: readonly string[], config: MigrationConfig): Promise<void> {
     const list = await DbMigrator.getViews(knex, schemas);
 
     for (const data of list) {
-      const sql = MigrationUtils.processSQLDefinition(data.definition, schemas);
+      const sql = this.processSQLDefinition(data.definition, schemas);
       const fullViewSql = `CREATE OR REPLACE VIEW ${data.name} AS ${sql}`;
-      const vars = MigrationUtils.generateObjectMigrationVars(fullViewSql, `DROP VIEW ${data.name}`);
+      const vars = this.generateObjectMigrationVars(fullViewSql, `DROP VIEW ${data.name}`);
 
-      const fileName = MigrationUtils.createFilename(config.outDir, `create_${data.schema}_${data.name}_view`, config.getTime());
-      MigrationUtils.createFile(fileName, vars);
+      const fileName = this.createFilename(config.outDir, `create_${data.schema}_${data.name}_view`, config.getTime());
+      this.createFile(fileName, vars);
       console.log('Generated view migration:', fileName);
     }
   }
@@ -367,7 +320,7 @@ export default abstract class MigrationUtils {
    * // Returns definition with: "field: 'user_id',\n"
    * ```
    */
-  private static addFieldProperty(definition: string, columnInfo: ColumnInfo): string {
+  private addFieldProperty(definition: string, columnInfo: ColumnInfo): string {
     if (columnInfo.propertyName !== columnInfo.name) {
       definition += sp(6, `field: '%s',\n`, columnInfo.name);
     }
@@ -392,7 +345,7 @@ export default abstract class MigrationUtils {
    * // Returns definition with: "type: 'email_domain', // PostgreSQL's Domain Type.\n"
    * ```
    */
-  private static addTypeDefinition(definition: string, columnInfo: ColumnInfo): string {
+  private addTypeDefinition(definition: string, columnInfo: ColumnInfo): string {
     let sequelizeType = columnInfo.sequelizeTypeParams;
 
     if (sequelizeType.startsWith('$QUOTE')) {
@@ -429,7 +382,7 @@ export default abstract class MigrationUtils {
    * // "autoIncrement: true,\n"
    * ```
    */
-  private static addPrimaryAndAutoIncrement(definition: string, columnInfo: ColumnInfo): string {
+  private addPrimaryAndAutoIncrement(definition: string, columnInfo: ColumnInfo): string {
     if (columnInfo.flags.primary) {
       definition += sp(6, `primaryKey: true,\n`);
     }
@@ -452,7 +405,7 @@ export default abstract class MigrationUtils {
    * // Returns definition with: "comment: 'User email address',\n"
    * ```
    */
-  private static addComment(definition: string, columnInfo: ColumnInfo): string {
+  private addComment(definition: string, columnInfo: ColumnInfo): string {
     if (columnInfo.comment) {
       definition += sp(6, `comment: '%s',\n`, columnInfo.comment);
     }
@@ -477,7 +430,7 @@ export default abstract class MigrationUtils {
    * // Returns definition with: "defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),\n"
    * ```
    */
-  private static addDefaultValue(definition: string, columnInfo: ColumnInfo): string {
+  private addDefaultValue(definition: string, columnInfo: ColumnInfo): string {
     if (columnInfo.defaultValue) {
       if (!TypeUtils.isDate(columnInfo.type)) {
         definition += sp(6, `defaultValue: %s,\n`, columnInfo.defaultValue);
@@ -502,14 +455,14 @@ export default abstract class MigrationUtils {
    * // Returns: "  userId: {\n    type: Sequelize.INTEGER,\n    allowNull: false,\n    primaryKey: true,\n  },\n"
    * ```
    */
-  private static generateColumnDefinition(columnInfo: ColumnInfo): string {
+  private generateColumnDefinition(columnInfo: ColumnInfo): string {
     let definition = sp(4, `%s: {\n`, columnInfo.propertyName);
 
-    definition = MigrationUtils.addFieldProperty(definition, columnInfo);
-    definition = MigrationUtils.addTypeDefinition(definition, columnInfo);
-    definition = MigrationUtils.addPrimaryAndAutoIncrement(definition, columnInfo);
-    definition = MigrationUtils.addComment(definition, columnInfo);
-    definition = MigrationUtils.addDefaultValue(definition, columnInfo);
+    definition = this.addFieldProperty(definition, columnInfo);
+    definition = this.addTypeDefinition(definition, columnInfo);
+    definition = this.addPrimaryAndAutoIncrement(definition, columnInfo);
+    definition = this.addComment(definition, columnInfo);
+    definition = this.addDefaultValue(definition, columnInfo);
 
     definition += sp(6, `allowNull: %s,\n`, String(columnInfo.flags.nullable));
     definition += sp(4, `},\n`);
@@ -533,18 +486,18 @@ export default abstract class MigrationUtils {
    * }, migrationVars);
    * ```
    */
-  public static async generateTableInfo(
+  public async generateTableInfo(
     params: { tableName: string; schemaName: string; columnsInfo: ColumnInfo[]; tableForeignKeys: ForeignKey[] },
     vars: { up: string; down: string },
   ): Promise<void> {
-    const { tableName, columnsInfo, schemaName } = params;
+    const {tableName, columnsInfo, schemaName} = params;
 
     vars.up += sp(2, `await queryInterface.createTable({ schema: '%s', tableName: '%s' }, {\n`, schemaName, tableName);
     vars.down += sp(2, `// drop '%s' table\n`, tableName);
     vars.down += sp(2, `await queryInterface.dropTable({ schema: '%s', tableName: '%s' });\n`, schemaName, tableName);
 
     for await (const columnInfo of columnsInfo) {
-      vars.up += MigrationUtils.generateColumnDefinition(columnInfo);
+      vars.up += this.generateColumnDefinition(columnInfo);
     }
 
     vars.up += sp(2, `});\n`);
@@ -561,7 +514,7 @@ export default abstract class MigrationUtils {
    * // Appends index creation code to vars.up
    * ```
    */
-  public static generateCreateIndexes(tableIndexes: TableIndex[], vars: { up: string; down: string }): void {
+  public generateCreateIndexes(tableIndexes: TableIndex[], vars: { up: string; down: string }): void {
     if (!tableIndexes.length) {
       return;
     }
@@ -584,7 +537,7 @@ export default abstract class MigrationUtils {
         tableIndex.columns.map((x) => `'${x}'`).join(', '),
       );
 
-      indexDefinition += sp(4, `name: '%s',\n`, MigrationUtils.escape(tableIndex.name));
+      indexDefinition += sp(4, `name: '%s',\n`, MigrationFormatter.escape(tableIndex.name));
 
       if (tableIndex.constraint === 'UNIQUE') {
         indexDefinition += sp(4, `unique: true,\n`);
@@ -611,7 +564,7 @@ export default abstract class MigrationUtils {
    * // Prepends index removal code to vars.down
    * ```
    */
-  public static generateRemoveIndexes(tableIndexes: TableIndex[], vars: { up: string; down: string }): void {
+  public generateRemoveIndexes(tableIndexes: TableIndex[], vars: { up: string; down: string }): void {
     if (!tableIndexes.length) {
       return;
     }
@@ -634,8 +587,8 @@ export default abstract class MigrationUtils {
    * // Returns { up: "await queryInterface.addConstraint...", down: "await queryInterface.removeConstraint..." }
    * ```
    */
-  private static generateForeignKeyMigration(foreignKey: ForeignKey): { up: string; down: string } {
-    const vars = { up: '', down: '' };
+  private generateForeignKeyMigration(foreignKey: ForeignKey): { up: string; down: string } {
+    const vars = {up: '', down: ''};
 
     if (foreignKey.comment) {
       vars.up += sp(2, `// %s\n`, foreignKey.comment);
@@ -691,12 +644,12 @@ export default abstract class MigrationUtils {
    * // Appends all foreign key creation code to vars.up and removal code to vars.down
    * ```
    */
-  public static generateForeignKeys(foreignKeys: ForeignKey[], vars: { up: string; down: string }): void {
+  public generateForeignKeys(foreignKeys: ForeignKey[], vars: { up: string; down: string }): void {
     console.log('Generating foreign keys...');
     if (!foreignKeys.length) return;
 
     for (const foreignKey of foreignKeys) {
-      const fkVars = MigrationUtils.generateForeignKeyMigration(foreignKey);
+      const fkVars = this.generateForeignKeyMigration(foreignKey);
       vars.up += fkVars.up;
       vars.down += fkVars.down;
     }

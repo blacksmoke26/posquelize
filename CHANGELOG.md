@@ -1,9 +1,10 @@
 
 # ChangeLog
 
-## v0.0.2 - 2025-11-15
+## v0.0.2 - 2025-11-16
 
 ### feat
+* Customized Nunjucks templates ([PR-16](https://github.com/blacksmoke26/posquelize/pull/16))
 * Paranoid Mode ([PR-14](https://github.com/blacksmoke26/posquelize/pull/14))
 * Configuration file support `posquelize.config.js` ([PR-13](https://github.com/blacksmoke26/posquelize/pull/13))
 * Enum alternative types (Union / Literal) ([PR-12](https://github.com/blacksmoke26/posquelize/pull/12))

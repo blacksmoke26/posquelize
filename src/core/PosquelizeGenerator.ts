@@ -15,7 +15,6 @@
 
 import fs from 'node:fs';
 
-import merge from 'deepmerge';
 import {rimraf} from 'rimraf';
 import {pascalCase} from 'change-case';
 
@@ -28,7 +27,8 @@ import DbUtils from '~/classes/DbUtils';
 import TemplateWriter from './TemplateWriter';
 import KnexClient from '~/classes/KnexClient';
 import ConfigHandler from '~/core/ConfigHandler';
-import MigrationGenerator, {MigrationOptions} from './MigrationGenerator';
+import ConfigCombiner from '~/core/ConfigCombiner';
+import MigrationGenerator from './MigrationGenerator';
 import RelationshipGenerator from './RelationshipGenerator';
 import TableColumns, {type ColumnInfo} from '~/classes/TableColumns';
 
@@ -90,6 +90,7 @@ export default class PosquelizeGenerator {
    * @see getOptions() for configuration options used during initialization
    */
   private modelGen: InstanceType<typeof ModelGenerator>;
+  private writer: InstanceType<typeof TemplateWriter>;
 
   /**
    * Database metadata including schemas, indexes, relationships, and foreign keys.
@@ -122,6 +123,7 @@ export default class PosquelizeGenerator {
   ) {
     this.knex = KnexClient.create(this.connectionString);
     this.modelGen = new ModelGenerator(this.getOptions());
+    this.writer = new TemplateWriter(this.getOptions());
   }
 
   /**
@@ -175,7 +177,7 @@ export default class PosquelizeGenerator {
     if (!fs.existsSync(configFile)) {
       console.error('Configuration file not found: "posquelize.config.js"');
       console.info('Creating a new configuration file in the current directory...');
-      TemplateWriter.renderOut('pos.config', configFile);
+      (new TemplateWriter).renderOut('pos.config', configFile);
       console.info('Please review and modify the configuration file, then run the command again.');
       return null;
     }
@@ -194,25 +196,7 @@ export default class PosquelizeGenerator {
    * @returns The merged configuration options
    */
   public getOptions(): Required<GeneratorOptions> {
-    return merge(
-      {
-        schemas: [],
-        tables: [],
-        dirname: 'database',
-        cleanRootDir: false,
-        diagram: true,
-        migrations: {},
-        repositories: true,
-        generator: {
-          model: {
-            addNullTypeForNullable: true,
-            replaceEnumsWithTypes: false,
-          },
-          enums: [],
-        },
-      },
-      this.options,
-    );
+    return ConfigCombiner.withOptions(this?.options ?? {}) as Required<GeneratorOptions>;
   }
 
   /**
@@ -399,7 +383,7 @@ export default class PosquelizeGenerator {
     this.updateConfig(config, modelName);
 
     if (this.getOptions().repositories) {
-      TemplateWriter.writeRepoFile(this.getBaseDir(), StringHelper.tableToModel(tableName), this.getOptions().dirname);
+      this.writer.writeRepoFile(this.getBaseDir(), StringHelper.tableToModel(tableName), this.getOptions().dirname);
     }
   }
 
@@ -536,7 +520,7 @@ export default class PosquelizeGenerator {
    */
   private writeModelFile(modelName: string, modTplVars: ModelTemplateVars): void {
     const fileName = FileHelper.join(this.getBaseDir('models'), `${modelName}.ts`);
-    TemplateWriter.renderOut('model-template', fileName, {...modTplVars, dirname: this.getOptions().dirname});
+    this.writer.renderOut('model-template', fileName, {...modTplVars, dirname: this.getOptions().dirname});
     console.log('Model generated:', fileName);
   }
 
@@ -591,7 +575,7 @@ export default class PosquelizeGenerator {
     } = {anyModelName: ''};
 
     // Write base template files
-    TemplateWriter.writeBaseFiles(this.getBaseDir(), this.getOptions().dirname, this.connectionString, {
+    this.writer.writeBaseFiles(this.getBaseDir(), this.getOptions().dirname, this.connectionString, {
       repoBase: this.getOptions().repositories,
     });
 
@@ -605,12 +589,12 @@ export default class PosquelizeGenerator {
     await this.generateModels(initTplVars, interfacesVar, config);
 
     // Write model type definitions
-    TemplateWriter.renderOut('generic/models.d', FileHelper.join(this.getBaseDir(), 'typings/models.d.ts'), {
+    this.writer.renderOut('generic/models.d', FileHelper.join(this.getBaseDir(), 'typings/models.d.ts'), {
       text: interfacesVar.text.replaceAll(`\n\n\n`, `\n\n`),
     });
 
     // Write server configuration file
-    TemplateWriter.writeServerFile(FileHelper.dirname(this.getBaseDir()), config.anyModelName, this.getOptions().dirname);
+    this.writer.writeServerFile(FileHelper.dirname(this.getBaseDir()), config.anyModelName, this.getOptions().dirname);
 
     // Generate relationship definitions
     RelationshipGenerator.generateRelations(this.dbData.relationships, initTplVars, {
@@ -620,7 +604,7 @@ export default class PosquelizeGenerator {
 
     // Write models initializer file
     const fileName = FileHelper.join(this.getBaseDir('models'), 'index.ts');
-    TemplateWriter.renderOut('models-initializer', fileName, initTplVars);
+    this.writer.renderOut('models-initializer', fileName, initTplVars);
     console.log('Models Initializer generated:', fileName);
 
     await Promise.all([
@@ -646,7 +630,7 @@ export default class PosquelizeGenerator {
       return;
     }
 
-    await TemplateWriter.writeDiagrams(this.getBaseDir('diagrams'), this.connectionString);
+    await this.writer.writeDiagrams(this.getBaseDir('diagrams'), this.connectionString);
   }
 
   /**
@@ -681,13 +665,13 @@ export default class PosquelizeGenerator {
         schemas: this.dbData.schemas,
         indexes: this.dbData.indexes,
         foreignKeys: this.dbData.foreignKeys,
-      },
-      {
-        dirname: this.getOptions().dirname,
         outDir: this.getBaseDir('migrations'),
         rootDir: this.rootDir,
+      },
+      {
+        ...this.getOptions(),
+        dirname: this.getOptions().dirname,
         tables: this.getOptions().tables,
-        generate: this.getOptions().migrations as MigrationOptions['generate'],
       },
     );
 
