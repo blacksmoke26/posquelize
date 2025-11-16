@@ -13,7 +13,7 @@ Posquelize is a powerful CLI tool that automates the generation of Sequelize app
 - ✅ **Complete Model Generation**: Creates Sequelize models,
   repositories, and TypeScript type definitions
 - 🔄 **Comprehensive Migration Support**: Generates migrations for
-  tables, functions, domains, views, triggers, indexes, and keys
+  tables, functions, domains, views, triggers, indexes, and keys in EcmaScript or CommonJS format.
 - 📊 **Advanced Type Support**: Handles custom user-defined types
   with automatic conversions
 - 📚 **Multi-Schema Support**: Seamlessly handle multiple database
@@ -227,6 +227,13 @@ module.exports = {
   repositories: false,  // Skip repository file generation
 
   generator: {
+    migration: {
+      /**
+       * Determines whether migration files should be generated using CommonJS module
+       * syntax instead of ECMAScript modules (ESM)
+       */
+      useCommonJs: false,
+    },
     model: {
       addNullTypeForNullable: true, // Controls whether nullable typed property
       replaceEnumsWithTypes: false, // Replace enum with String Union types

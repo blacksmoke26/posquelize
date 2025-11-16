@@ -128,6 +128,18 @@ module.exports = {
    */
   generator: {
     /**
+     * Migration-specific generation options
+     * @type {Object}
+     */
+    migration: {
+      /**
+       * Determines whether migration files should be generated using CommonJS module
+       * syntax instead of ECMAScript modules (ESM)
+       * @type {boolean}
+       */
+      //useCommonJs: false,
+    },
+    /**
      * Model-specific generation options
      * @type {Object}
      */
@@ -146,7 +158,7 @@ module.exports = {
     /**
      * Configuration for enum generation
      * Allows generating enums for table columns instead of plain values
-     * @type {Object[]}
+     * @type {{path: string, values: string[] | Record<string, string | number>, defaultValue: string | number}[]}
      */
     // enums: [{
     //   /**
