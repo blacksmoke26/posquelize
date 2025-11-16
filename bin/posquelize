@@ -37,26 +37,27 @@ const argv = yargs(hideBin(process.argv))
     description: 'Database name.',
     type: 'string',
     alias: 'd',
-    demandOption: true
   })
   .option('user', {
     description: 'Username for database.',
     type: 'string',
     alias: 'u',
-    demandOption: true
   })
   .option('pass', {
     description: 'Password for database. If specified without providing a password, it will be requested interactively from the terminal.',
     alias: 'x',
-    demandOption: true
   })
   .option('port', {
     description: 'Port number for database',
     type: 'number',
     alias: 'p'
   })
+  .option('use-config', {
+    description: 'Use the configuration file (posquelize.config.js)',
+    type: 'boolean'
+  })
   .option('output', {
-    description: 'What directory to place the models.',
+    description: 'Relative directory to place the generated files.',
     type: 'string',
     alias: 'o'
   })
@@ -77,6 +78,10 @@ const argv = yargs(hideBin(process.argv))
     description: 'Tables name to be included only (separated by commas)',
     type: 'string',
   })
+  .option('extract-templates', {
+    description: 'Extract and copy templates into the current directory',
+    type: 'boolean',
+  })
   .option('no-diagram', {
     description: 'Do not generate ER diagram of the database.',
     type: 'boolean',
@@ -89,13 +94,26 @@ const argv = yargs(hideBin(process.argv))
     description: 'Do not generate the repository files.',
     type: 'boolean',
   })
+  .option('no-enums', {
+    description: 'Generate enum alternative (literals and unions)',
+    type: 'boolean',
+  })
+  .option('no-null-type', {
+    description: 'Omit null in type declaration for nullable column',
+    type: 'boolean',
+  })
   .default({
     host: 'localhost',
     port: 5432,
-    clean: false,
+    output: 'myapp',
     dirname: 'database',
+    clean: false,
+    'use-config': false,
     'no-diagram': false,
+    'extract-templates': false,
     'no-migrations': false,
+    'no-enums': false,
+    'no-null-type': false,
   })
   .parse();
 
@@ -121,6 +139,36 @@ async function readPassword () {
  * Main execution function
  */
 (async function () {
+  console.log(await figlet.text('Posquelize', { font: 'Slant' }) + `\n\n`);
+
+  if (argv['extract-templates']) {
+    const destDir = path.normalize(process.cwd() + '/templates')
+    const srcDir = path.normalize(__dirname + '/../lib/templates');
+
+    if (!fs.existsSync(destDir)) fs.mkdirSync(destDir);
+
+    try {
+      fs.cpSync(srcDir, destDir, {recursive: true});
+      console.log('Notice: Templates has been copied to `/templates` directory.');
+    } catch (e) {
+      console.log('Failed to copy templates due to ' + e.message);
+    }
+    return;
+  }
+
+  if (argv['use-config']) {
+    const generator = await PosquelizeGenerator.createWithConfig(process.cwd());
+    if (!generator) return;
+
+    await generator.generate();
+    process.exit(1);
+  }
+
+  if (!argv['user'] || !argv['database'] || !argv['pass']) {
+    console.log(`Missing required flags: --user, --password  and --database.`);
+    process.exit(1);
+  }
+
   let password;
   if (typeof argv.pass === 'boolean' && argv.pass) {
     password = await readPassword();
@@ -143,23 +191,36 @@ async function readPassword () {
     dirname: argv.dirname,
     schemas: String(argv.schemas || '').split(',').filter(Boolean),
     tables: String(argv.tables || '').split(',').filter(Boolean),
+    generator: {
+      model: {},
+    },
   };
 
-  if ( argv['no-diagram'] ) {
-    config.diagram = false
+  if (argv['no-diagram']) {
+    config.diagram = false;
   }
 
-  if ( argv['no-migrations'] ) {
-    config.migrations = false
+  if (argv['no-migrations']) {
+    config.migrations = false;
   }
 
-  if ( argv['no-repositories'] ) {
-    config.repositories = false
+  if (argv['no-repositories']) {
+    config.repositories = false;
+  }
+
+  if (argv['no-enums']) {
+    config.generator.model.replaceEnumsWithTypes = true;
+  }
+
+  if (argv['no-null-type']) {
+    config.generator.model.addNullTypeForNullable = false;
+  }
+
+  if (argv['config']) {
+    config.configFile = path.normalize(process.cwd() + '/posquelize.config.js');
   }
 
   const connectionString = `postgresql://${argv.user}:${password}@${argv.host}:${argv.port}/${argv.database}`;
-
-  console.log(await figlet.text('Posquelize Generator', { font: 'Slant' }));
 
   const generator = new PosquelizeGenerator(connectionString, dir, config);
   await generator.generate();

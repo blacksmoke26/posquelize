@@ -28,12 +28,12 @@
  * ```
  */
 
-import { sprintf } from 'sprintf-js';
-import { singular } from 'pluralize';
-import { pascalCase } from 'change-case';
+import {sprintf} from 'sprintf-js';
+import {singular} from 'pluralize';
+import {pascalCase} from 'change-case';
 
 // classes
-import { ColumnInfo } from '~/classes/TableColumns';
+import {ColumnInfo} from '~/classes/TableColumns';
 
 // parsers
 import SequelizeParser from '~/parsers/SequelizeParser';
@@ -45,8 +45,12 @@ import StringHelper from '~/helpers/StringHelper';
 import TypeUtils from '~/classes/TypeUtils';
 import TableUtils from '~/classes/TableUtils';
 
+// formatters
+import EnumFormatter from '~/formatters/EnumFormatter';
+
 // types
-import { ForeignKey, Relationship, TableIndex } from '~/typings/utils';
+import {ForeignKey, Relationship, TableIndex} from '~/typings/utils';
+import {GeneratorOptions} from '~/typings/generator';
 
 /**
  * Template variables for generating a Sequelize model
@@ -110,15 +114,36 @@ export interface InitTemplateVars {
  * @description Configuration object containing all the necessary information
  * to determine the appropriate TypeScript type annotation for a model field.
  */
-interface DetermineTypeTextParams {
+export interface DetermineTypeTextParams {
   /** Whether the column is a foreign key referencing another table */
   isFK: boolean;
-  /** Whether the column is a primary key */
-  isPrimary: boolean;
-  /** Whether the column allows null values */
-  isNullable: boolean;
+  /** Complete column information including type, flags, and naming conventions */
+  columnInfo: ColumnInfo;
   /** Base TypeScript type for the column */
   tsType: string;
+  /** Name of the referenced table (for foreign keys) */
+  targetTable: string | null;
+  /** Name of the referenced column (for foreign keys) */
+  targetColumn: string | null;
+}
+
+/**
+ * Parameters for generating TypeScript field declarations in the model
+ *
+ * @interface GenerateFieldsParams
+ * @description Contains all the necessary information for generating TypeScript
+ * field declarations for a database column, including column metadata, template
+ * variables to modify, and relationship information.
+ */
+export interface GenerateFieldsParams {
+  /** Complete column information including type, flags, and naming conventions */
+  columnInfo: ColumnInfo;
+  /** Template variables object to modify with generated field declaration */
+  vars: ModelTemplateVars;
+  /** Name of the model being generated (used for type resolution) */
+  modelName: string;
+  /** Whether the column is a foreign key referencing another table */
+  isFK: boolean;
   /** Name of the referenced table (for foreign keys) */
   targetTable: string | null;
   /** Name of the referenced column (for foreign keys) */
@@ -148,10 +173,10 @@ export const sp = (count: number, str: string = '', ...args: any[]) => ' '.repea
  * Abstract class for generating Sequelize model templates
  *
  * @class ModelGenerator
- * @description Provides comprehensive static methods for generating Sequelize model
+ * @description Provides comprehensive methods for generating Sequelize model
  * files from database table definitions. This class handles all aspects of model
  * generation including TypeScript typing, Sequelize attributes, associations,
- * and configurations. All methods are static as this is a utility class.
+ * and configurations. All methods are as this is a utility class.
  *
  * The generation process follows these steps:
  * 1. Create template variables with initial values
@@ -167,7 +192,10 @@ export const sp = (count: number, str: string = '', ...args: any[]) => ' '.repea
  * ModelGenerator.generateFields(columnInfo, templateVars, 'User', options);
  * ```
  */
-export default abstract class ModelGenerator {
+export default class ModelGenerator {
+  constructor(public options: GeneratorOptions) {
+  }
+
   /**
    * Creates a new ModelTemplateVars object with all properties initialized to empty strings
    * Merges any provided partial variables with the defaults
@@ -188,7 +216,7 @@ export default abstract class ModelGenerator {
    * });
    * ```
    */
-  public static getModelTemplateVars = (vars: Partial<ModelTemplateVars> = {}): ModelTemplateVars => {
+  public getModelTemplateVars = (vars: Partial<ModelTemplateVars> = {}): ModelTemplateVars => {
     return {
       schemaName: '',
       imports: '',
@@ -224,7 +252,7 @@ export default abstract class ModelGenerator {
    * });
    * ```
    */
-  public static getInitializerTemplateVars = (vars: Partial<InitTemplateVars> = {}): InitTemplateVars => {
+  public getInitializerTemplateVars = (vars: Partial<InitTemplateVars> = {}): InitTemplateVars => {
     return {
       importClasses: '',
       importTypes: '',
@@ -248,16 +276,15 @@ export default abstract class ModelGenerator {
    * @returns {string} TypeScript type string for the column
    *
    * @private
-   * @static
    */
-  private static determineTsType = (columnInfo: ColumnInfo, modelName: string): string => {
+  private determineTsType = (columnInfo: ColumnInfo, modelName: string): string => {
     if (SequelizeParser.isEnum(columnInfo.sequelizeTypeParams)) {
       return modelName + pascalCase(columnInfo.name);
-    }
-    if (SequelizeParser.isJSON(columnInfo.sequelizeTypeParams)) {
+    } else if (SequelizeParser.isJSON(columnInfo.sequelizeTypeParams)) {
       return TableUtils.toJsonColumnTypeName(columnInfo.table, columnInfo.name);
+    } else {
+      return columnInfo.tsType;
     }
-    return columnInfo.tsType;
   };
 
   /**
@@ -271,29 +298,36 @@ export default abstract class ModelGenerator {
    *
    * @param {DetermineTypeTextParams} params - Configuration object containing column type information
    * @param {boolean} params.isFK - Whether the column is a foreign key referencing another table
-   * @param {boolean} params.isPrimary - Whether the column is a primary key
-   * @param {boolean} params.isNullable - Whether the column allows null values
+   * @param {ColumnInfo} params.columnInfo - Complete column information including type parameters
    * @param {string} params.tsType - Base TypeScript type for the column
    * @param {string|null} params.targetTable - Name of the referenced table (for foreign keys)
    * @param {string|null} params.targetColumn - Name of the referenced column (for foreign keys)
    * @returns {string} Formatted type annotation string for the field declaration
    *
    * @private
-   * @static
    */
-  private static determineTypeText = (params: DetermineTypeTextParams): string => {
-    const {
-      isFK,
-      isPrimary,
-      isNullable,
-      tsType,
-      targetTable,
-      targetColumn,
-    } = params;
-    if (isFK && !isPrimary) {
+  private determineTypeText = (params: DetermineTypeTextParams): string => {
+    const {isFK, columnInfo, tsType, targetTable, targetColumn} = params;
+
+    const {primary, nullable} = columnInfo.flags;
+
+    const nullType = this.options.generator?.model?.addNullTypeForNullable && nullable ? ' | null' : '';
+    const configEnum = this.options.generator?.enums?.findIndex?.(x => x.path === TableUtils.toFQNPath(params.columnInfo));
+
+    if (isFK && !primary) {
       return sp(0, `Sequelize.ForeignKey<%s['%s']>`, StringHelper.tableToModel(targetTable!), StringHelper.toPropertyName(targetColumn!));
     }
-    return sp(0, isNullable || isPrimary ? `Sequelize.CreationOptional<%s>` : `%s`, tsType);
+
+    if (configEnum !== -1) {
+      return sp(0, `Sequelize.CreationOptional<%s>`, StringHelper.toConfigurableEnumName(columnInfo.table, columnInfo.name));
+    }
+
+    if (TypeUtils.isJSON(columnInfo.type) && columnInfo?.defaultValue?.toString?.()?.startsWith('[')) {
+      return sp(0, nullable ? `Sequelize.CreationOptional<%s[]>` : `%s`, tsType);
+    }
+
+    const isOptional = nullable || primary || TypeUtils.isEnum(columnInfo.sequelizeType);
+    return sp(0, isOptional ? `Sequelize.CreationOptional<%s>` : `%s`, tsType + nullType);
   };
 
   /**
@@ -309,9 +343,8 @@ export default abstract class ModelGenerator {
    * @param {ColumnInfo} columnInfo - Column information containing comment and flag data
    *
    * @private
-   * @static
    */
-  private static addFieldComment = (vars: ModelTemplateVars, columnInfo: ColumnInfo): void => {
+  private addFieldComment = (vars: ModelTemplateVars, columnInfo: ColumnInfo): void => {
     if (columnInfo.flags.primary && !columnInfo.comment) {
       vars.fields += sp(2, '/** The unique identifier for the %s */\n', singular(columnInfo.table));
     }
@@ -329,39 +362,31 @@ export default abstract class ModelGenerator {
    * The generated field includes proper typing, readonly modifiers for primary keys,
    * nullable markers, and appropriate JSDoc comments.
    *
-   * @param {ColumnInfo} columnInfo - Column information including type, flags, and naming
-   * @param {ModelTemplateVars} vars - Template variables object to modify with generated field declaration
-   * @param {string} modelName - Name of the model being generated (used for type resolution)
-   * @param {Object} options - Configuration object containing foreign key relationship information
-   * @param {boolean} options.isFK - Whether the column is a foreign key
-   * @param {string|null} options.targetTable - Name of the referenced table (if foreign key)
-   * @param {string|null} options.targetColumn - Name of the referenced column (if foreign key)
-   *
-   * @public
-   * @static
+   * @param {GenerateFieldsParams} params - Parameters object containing column information and generation context
+   * @param {ColumnInfo} params.columnInfo - Column information including type, flags, and naming
+   * @param {ModelTemplateVars} params.vars - Template variables object to modify with generated field declaration
+   * @param {string} params.modelName - Name of the model being generated (used for type resolution)
+   * @param {boolean} params.isFK - Whether the column is a foreign key
+   * @param {string|null} params.targetTable - Name of the referenced table (if foreign key)
+   * @param {string|null} params.targetColumn - Name of the referenced column (if foreign key)
+   * @param {GeneratorOptions['generator']} [params.generator] - Generator options configuration
    */
-  public static generateFields = (
-    columnInfo: ColumnInfo,
-    vars: ModelTemplateVars,
-    modelName: string,
-    { isFK, targetTable, targetColumn }: { targetTable: string | null; targetColumn: string | null; isFK: boolean },
-  ) => {
-    const readOnly = columnInfo.flags.primary ? 'readonly ' : '';
-    const tsType = this.determineTsType(columnInfo, modelName);
+  public generateFields = (params: GenerateFieldsParams) => {
+    const readOnly = params.columnInfo.flags.primary ? 'readonly ' : '';
+    const tsType = this.determineTsType(params.columnInfo, params.modelName);
 
-    this.addFieldComment(vars, columnInfo);
+    this.addFieldComment(params.vars, params.columnInfo);
 
     const typeText = this.determineTypeText({
-      isFK,
-      isPrimary: columnInfo.flags.primary,
-      isNullable: columnInfo.flags.nullable,
+      isFK: params.isFK,
+      columnInfo: params.columnInfo,
       tsType,
-      targetTable,
-      targetColumn,
+      targetTable: params.targetTable,
+      targetColumn: params.targetColumn,
     });
 
-    const nullable = columnInfo.flags.nullable ? '?' : '';
-    vars.fields += sp(2, `%sdeclare %s%s: %s;\n`, readOnly, columnInfo.propertyName, nullable, typeText);
+    const nullable = params.columnInfo.flags.nullable ? '?' : '';
+    params.vars.fields += sp(2, `%sdeclare %s%s: %s;\n`, readOnly, params.columnInfo.propertyName, nullable, typeText);
   };
 
   /**
@@ -377,9 +402,8 @@ export default abstract class ModelGenerator {
    * @param {{text: string}} interfacesVars - Object containing the accumulated interface text
    *
    * @private
-   * @static
    */
-  private static generateInterfaceDefinition = (columnInfo: ColumnInfo, interfacesVars: { text: string }): void => {
+  private generateInterfaceDefinition = (columnInfo: ColumnInfo, interfacesVars: { text: string }): void => {
     const typeName = TableUtils.toJsonColumnTypeName(columnInfo.table, columnInfo.name);
 
     if (!columnInfo?.tsInterface || !columnInfo?.tsInterface?.includes?.('interface')) {
@@ -406,9 +430,8 @@ export default abstract class ModelGenerator {
    * @param {{text: string}} interfacesVars - Object containing the generated interface text
    *
    * @public
-   * @static
    */
-  public static generateInterfaces = (columnInfo: ColumnInfo, vars: ModelTemplateVars, interfacesVars: {
+  public generateInterfaces = (columnInfo: ColumnInfo, vars: ModelTemplateVars, interfacesVars: {
     text: string
   }) => {
     if (!TypeUtils.isJSON(columnInfo.type)) {
@@ -434,7 +457,6 @@ export default abstract class ModelGenerator {
    * @returns {string} Formatted string containing all enum member definitions
    *
    * @private
-   * @static
    *
    * @example
    * ```typescript
@@ -443,60 +465,77 @@ export default abstract class ModelGenerator {
    * // "  Active = 'active',\n  Inactive = 'inactive',\n"
    * ```
    */
-  private static generateEnumValues = (values: string[]): string => {
-    return values.map((x) => sp(2, `%s = '%s',\n`, pascalCase(x), x)).join('');
+  private generateEnumValues = (values: string[] | { [p: string]: number | string }): string => {
+    if (Array.isArray(values)) {
+      return values.map((x) => sp(2, `%s = '%s',\n`, pascalCase(x), x)).join('');
+    }
+
+    return Object.entries(values).map(([k, v]) => {
+      return sp(2, `%s = %s,\n`, pascalCase(k), /\d+/.test(String(v)) ? v : `'${v}'`);
+    }).join('');
   };
 
   /**
-   * Generates TypeScript enum definitions for database columns with enum types
-   * Creates a named enum with PascalCase keys and documentation
+   * Generates TypeScript enum definitions for enum columns
+   * Handles both native database enums and configurable enum values
    *
-   * @function generateEnums
-   * @description Creates TypeScript enum definitions for database columns that
-   * use the ENUM type. The enum is named using the model name and column name
-   * in PascalCase, and includes JSDoc documentation.
-   *
-   * @param {ColumnInfo} columnInfo - Column information containing enum type parameters
-   * @param {ModelTemplateVars} vars - Template variables object to modify with generated enum
-   * @param {string} modelName - Name of the model (used to prefix the enum name)
+   * @param {ColumnInfo} columnInfo - Column information including type parameters and table name
+   * @param {ModelTemplateVars} vars - Template variables object to modify with generated enum definitions
    *
    * @public
-   * @static
    */
-  public static generateEnums = (columnInfo: ColumnInfo, vars: ModelTemplateVars, modelName: string) => {
-    const values = SequelizeParser.parseEnums(columnInfo.sequelizeTypeParams);
-    if (!values.length) return;
+  public generateEnums (columnInfo: ColumnInfo, vars: ModelTemplateVars) {
+    let nativeEnums = SequelizeParser.parseEnums(columnInfo.sequelizeTypeParams);
 
-    vars.enums += sp(0, `\n/** Enum representing possible %s values for a %s. */\n`, columnInfo.name, singular(columnInfo.table));
-    vars.enums += sp(0, `export enum %s%s {\n`, modelName, pascalCase(columnInfo.name));
-    vars.enums += this.generateEnumValues(values);
-    vars.enums += sp(0, `}\n`);
+    if ( nativeEnums.length ) {
+      (new EnumFormatter({columnInfo, vars}, this.options)).process(nativeEnums);
+      return;
+    }
+
+    const configEnum = this.options.generator?.enums
+      ?.find?.(x => x.path === TableUtils.toFQNPath(columnInfo)) ?? null;
+
+    if (configEnum !== null) {
+      (new EnumFormatter({columnInfo, vars}, this.options)).process(configEnum.values);
+    }
   };
 
   /**
-   * Generates basic model configuration options
-   * Sets up sequelize instance, schema, and table name
+   * Generates basic model configuration options for a Sequelize model
+   * Sets up the database connection instance, schema, and table name
    *
    * @function generateBasicOptions
-   * @description Adds the fundamental configuration options for a Sequelize model,
-   * including the database connection instance, schema name, and table name.
-   * These are the minimum required options for any model definition.
+   * @description Adds the fundamental configuration options required for any Sequelize model definition.
+   * This includes setting up the database connection instance through getInstance(),
+   * specifying the database schema where the table resides, and configuring the table name.
+   * These options form the foundation of model configuration and are required for all models.
    *
-   * @param {ModelTemplateVars} modTplVars - Template variables object to modify with options
-   * @param {Object} options - Configuration containing schema and table names
-   * @param {string} options.schemaName - Database schema name
-   * @param {string} options.tableName - Database table name
+   * @param {ModelTemplateVars} modTplVars - Template variables object that will be modified with the generated options
+   * @param {Object} options - Configuration object containing the database schema and table information
+   * @param {string} options.schemaName - The name of the database schema where the table is located
+   * @param {string} options.tableName - The actual name of the database table being modeled
+   * @param {ColumnInfo[]} options.columnsInfo - Array containing information about all columns in the table (unused in this method but part of the options interface)
    *
    * @private
-   * @static
    */
-  private static generateBasicOptions = (
+  private generateBasicOptions = (
     modTplVars: ModelTemplateVars,
-    { schemaName, tableName }: { schemaName: string; tableName: string },
+    {schemaName, tableName, columnsInfo}: { schemaName: string; tableName: string; columnsInfo: ColumnInfo[] },
   ): void => {
     modTplVars.options += sp(4, `sequelize: getInstance(),\n`);
     modTplVars.options += sp(4, `schema: '%s',\n`, schemaName);
     modTplVars.options += sp(4, `tableName: '%s',\n`, tableName);
+
+    //region Defining a model as paranoid
+    const deletedColumn = columnsInfo.find(x => x.name.startsWith('delete')) ?? null;
+
+    if (deletedColumn) {
+      modTplVars.options += sp(4, `paranoid: true,\n`);
+
+      if (deletedColumn.propertyName !== 'deletedAt')
+        modTplVars.options += sp(4, `deletedAt: '%s',\n`, deletedColumn.propertyName);
+    }
+    //endregion
   };
 
   /**
@@ -514,11 +553,10 @@ export default abstract class ModelGenerator {
    * @param {boolean} options.hasUpdatedAt - Whether the model should track update timestamps
    *
    * @private
-   * @static
    */
-  private static generateTimestampOptions = (
+  private generateTimestampOptions = (
     modTplVars: ModelTemplateVars,
-    { hasCreatedAt, hasUpdatedAt }: { hasCreatedAt: boolean; hasUpdatedAt: boolean },
+    {hasCreatedAt, hasUpdatedAt}: { hasCreatedAt: boolean; hasUpdatedAt: boolean },
   ): void => {
     modTplVars.options += sp(4, `timestamps: %s,\n`, hasCreatedAt && hasUpdatedAt ? 'true' : 'false');
 
@@ -541,18 +579,18 @@ export default abstract class ModelGenerator {
    * configurations. The method delegates to helper methods for each option type.
    *
    * @param {ModelTemplateVars} modTplVars - Template variables object to modify with all options
-   * @param {Object} options - Complete configuration including schema, table, and timestamp settings
+   * @param {Object} options - Complete configuration including schema, table, timestamp settings, and column information
    * @param {string} options.schemaName - Database schema name
    * @param {string} options.tableName - Database table name
    * @param {boolean} options.hasCreatedAt - Whether to track creation timestamps
    * @param {boolean} options.hasUpdatedAt - Whether to track update timestamps
+   * @param {ColumnInfo[]} options.columnsInfo - Array of column information for the table
    *
    * @public
-   * @static
    */
-  public static generateOptions = (
+  public generateOptions = (
     modTplVars: ModelTemplateVars,
-    options: { schemaName: string; tableName: string; hasCreatedAt: boolean; hasUpdatedAt: boolean },
+    options: { schemaName: string; tableName: string; hasCreatedAt: boolean; hasUpdatedAt: boolean; columnsInfo: ColumnInfo[] },
   ) => {
     this.generateBasicOptions(modTplVars, options);
     this.generateTimestampOptions(modTplVars, options);
@@ -571,9 +609,8 @@ export default abstract class ModelGenerator {
    * @param {TableIndex} index - Complete index definition including columns and properties
    *
    * @private
-   * @static
    */
-  private static generateSingleIndex = (modTplVars: ModelTemplateVars, index: TableIndex): void => {
+  private generateSingleIndex = (modTplVars: ModelTemplateVars, index: TableIndex): void => {
     if (index.comment) {
       modTplVars.options += sp(6, `/** %s */\n`, index.comment);
     }
@@ -606,9 +643,8 @@ export default abstract class ModelGenerator {
    * @param {ModelTemplateVars} modTplVars - Template variables object to modify with index array
    *
    * @public
-   * @static
    */
-  public static generateIndexes = (indexes: TableIndex[], modTplVars: ModelTemplateVars) => {
+  public generateIndexes = (indexes: TableIndex[], modTplVars: ModelTemplateVars) => {
     if (!indexes.length) return;
 
     modTplVars.options += sp(4, `indexes: [\n`);
@@ -631,9 +667,8 @@ export default abstract class ModelGenerator {
    * @param {ModelTemplateVars} modTplVars - Template variables object to modify with attribute definition
    *
    * @private
-   * @static
    */
-  private static generateAttributeField = (columnInfo: ColumnInfo, modTplVars: ModelTemplateVars): void => {
+  private generateAttributeField = (columnInfo: ColumnInfo, modTplVars: ModelTemplateVars): void => {
     modTplVars.attributes += sp(4, `%s: {\n`, columnInfo.propertyName);
 
     if (columnInfo.propertyName !== columnInfo.name) {
@@ -654,9 +689,8 @@ export default abstract class ModelGenerator {
    * @param {ModelTemplateVars} modTplVars - Template variables object to modify with reference configuration
    *
    * @private
-   * @static
    */
-  private static generateAttributeReference = (foreignKey: ForeignKey | null, modTplVars: ModelTemplateVars): void => {
+  private generateAttributeReference = (foreignKey: ForeignKey | null, modTplVars: ModelTemplateVars): void => {
     if (!foreignKey) return;
 
     modTplVars.attributes += sp(6, `references: {\n`);
@@ -686,9 +720,8 @@ export default abstract class ModelGenerator {
    * @param {ModelTemplateVars} modTplVars - Template variables object to modify with type configuration
    *
    * @private
-   * @static
    */
-  private static generateAttributeType = (columnInfo: ColumnInfo, modTplVars: ModelTemplateVars): void => {
+  private generateAttributeType = (columnInfo: ColumnInfo, modTplVars: ModelTemplateVars): void => {
     let sequelizeType = columnInfo.sequelizeTypeParams;
 
     if (!sequelizeType || sequelizeType === 'null') {
@@ -737,9 +770,8 @@ export default abstract class ModelGenerator {
    * @param {ModelTemplateVars} modTplVars - Template variables object to modify with flag configurations
    *
    * @private
-   * @static
    */
-  private static generateAttributeFlags = (columnInfo: ColumnInfo, modTplVars: ModelTemplateVars): void => {
+  private generateAttributeFlags = (columnInfo: ColumnInfo, modTplVars: ModelTemplateVars): void => {
     if (columnInfo.flags.primary) {
       modTplVars.attributes += sp(6, `primaryKey: true,\n`);
     }
@@ -764,20 +796,30 @@ export default abstract class ModelGenerator {
    * @param {ModelTemplateVars} modTplVars - Template variables object to modify with default value configuration
    *
    * @private
-   * @static
    */
-  private static generateAttributeDefault = (columnInfo: ColumnInfo, modTplVars: ModelTemplateVars): void => {
-    if (columnInfo.defaultValue) {
-      if (TypeUtils.isJSON(columnInfo.type)) {
-        const formatted = String(columnInfo.defaultValue ?? '')
-          .replaceAll('"', '\'')
-          .replaceAll('{', '{ ')
-          .replaceAll('}', ' }');
-        modTplVars.attributes += sp(6, `defaultValue: %s,\n`, formatted);
-      } else if (!TypeUtils.isDate(columnInfo.type)) {
-        modTplVars.attributes += sp(6, `defaultValue: %s,\n`, columnInfo.defaultValue);
-      } else {
-        if (columnInfo.defaultValueRaw?.startsWith?.('CURRENT_')) modTplVars.attributes += sp(6, `defaultValue: Sequelize.literal('%s'),\n`, columnInfo.defaultValueRaw);
+  private generateAttributeDefault = (columnInfo: ColumnInfo, modTplVars: ModelTemplateVars): void => {
+    const configEnum = this.options.generator?.enums?.find?.(x => x.path === TableUtils.toFQNPath(columnInfo)) ?? null;
+
+    if (configEnum !== null && configEnum?.defaultValue !== undefined) {
+      modTplVars.attributes += sp(6, `defaultValue: %s,\n`, Number.isInteger(configEnum.defaultValue) ? configEnum.defaultValue : `'${configEnum.defaultValue}'`);
+      return;
+    }
+
+    if (!columnInfo.defaultValue) {
+      return;
+    }
+
+    if (TypeUtils.isJSON(columnInfo.type)) {
+      const formatted = String(columnInfo.defaultValue ?? '')
+        .replaceAll('"', '\'')
+        .replaceAll('{', '{ ')
+        .replaceAll('}', ' }');
+      modTplVars.attributes += sp(6, `defaultValue: %s,\n`, formatted);
+    } else if (!TypeUtils.isDate(columnInfo.type)) {
+      modTplVars.attributes += sp(6, `defaultValue: %s,\n`, columnInfo.defaultValue);
+    } else {
+      if (columnInfo.defaultValueRaw?.startsWith?.('CURRENT_')) {
+        modTplVars.attributes += sp(6, `defaultValue: Sequelize.literal('%s'),\n`, columnInfo.defaultValueRaw);
       }
     }
   };
@@ -798,14 +840,13 @@ export default abstract class ModelGenerator {
    * @param {ForeignKey[]} params.tableForeignKeys - Array of all foreign key relationships for the table
    *
    * @public
-   * @static
    */
-  public static generateAttributes = (params: {
+  public generateAttributes = (params: {
     columnInfo: ColumnInfo;
     modTplVars: ModelTemplateVars;
     tableForeignKeys: ForeignKey[];
   }) => {
-    const { columnInfo, modTplVars, tableForeignKeys } = params;
+    const {columnInfo, modTplVars, tableForeignKeys} = params;
     const foreignKey = tableForeignKeys.find((x) => x.columnName === columnInfo.name) ?? null;
 
     this.generateAttributeField(columnInfo, modTplVars);
@@ -838,9 +879,8 @@ export default abstract class ModelGenerator {
    * @param {string[]} imported - Array tracking already imported table names to prevent duplicates
    *
    * @private
-   * @static
    */
-  private static generateSingleModelImport = (
+  private generateSingleModelImport = (
     modTplVars: ModelTemplateVars,
     tableRelation: Relationship,
     imported: string[],
@@ -870,9 +910,8 @@ export default abstract class ModelGenerator {
    * @param {ModelTemplateVars} modTplVars - Template variables object to modify with generated import statements
    *
    * @public
-   * @static
    */
-  public static generateRelationsImports = (tableRelations: Relationship[], modTplVars: ModelTemplateVars) => {
+  public generateRelationsImports = (tableRelations: Relationship[], modTplVars: ModelTemplateVars) => {
     if (!tableRelations.length) return;
 
     const imported: string[] = [];

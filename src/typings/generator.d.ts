@@ -1,4 +1,12 @@
-import { MigrationOptions } from '~/core/MigrationGenerator';
+/**
+ * @author Junaid Atari <mj.atari@gmail.com>
+ * @copyright 2025 Junaid Atari
+ * @see https://github.com/blacksmoke26
+ *
+ * Configuration interface for the database model generator.
+ * Defines options for controlling model generation, migrations, diagrams,
+ * repositories, and various output formatting preferences.
+ */
 
 /**
  * Configuration options for the generator
@@ -22,6 +30,146 @@ export interface GeneratorOptions {
    * @default false
    */
   cleanRootDir?: boolean;
+
+  /**
+   * Configuration options specific to the code generator behavior and output formatting.
+   * These options control how the generated TypeScript models and types are constructed,
+   * allowing for customization of the code generation process to match specific project
+   * requirements and coding standards.
+   */
+  generator?: {
+    /**
+     * Configuration options for model generation, controlling how TypeScript models
+     * and their properties are generated from database schemas.
+     */
+    model?: {
+      /**
+       * Controls whether nullable database columns should be explicitly typed with
+       * the `null` type in the generated Model TypeScript property declaration.
+       *
+       * When enabled (true), nullable columns will be typed as `T | null` where T is the
+       * base type. When disabled (false), nullable columns will use the base type only,
+       * relying on TypeScript's strict null checking settings to determine nullability.
+       *
+       * This option is particularly useful when working with TypeScript's strict null
+       * checks or when you need explicit null handling in your generated types.
+       *
+       * @default true
+       * @example  When set to true
+       * ```typescript
+       * declare role?: Sequelize.CreationOptional<string | null>  // nullable column
+       * declare role: Sequelize.CreationOptional<string>  // non-null column
+       * ```
+       * @example When set to false
+       * ```typescript
+       * declare role?: Sequelize.CreationOptional<string>  // nullable column
+       * declare role: Sequelize.CreationOptional<string>  // non-null column
+       * ```
+       */
+      addNullTypeForNullable?: boolean;
+      /**
+       * Determines whether database enum columns should be generated as TypeScript union types
+       * rather than native TypeScript enums in the model definitions.
+       *
+       * When enabled, enum columns are transformed into string literal union types,
+       * enhancing type safety during compilation and eliminating runtime enum overhead.
+       * When disabled, the generator creates standard TypeScript enum declarations.
+       *
+       * This configuration is beneficial for:
+       * - Achieving compile-time type checking for enum values
+       * - Reducing bundle size by avoiding enum object generation at runtime
+       * - Improving code maintainability with explicit value representation
+       * - Ensuring consistent type behavior across different execution environments
+       *
+       * @default false
+       * @example When enabled
+       * ```typescript
+       * // Generated with replaceEnumsWithTypes: true
+       * declare status?: CreationOptional<'active' | 'inactive' | 'pending'>;
+       * ```
+       * @example When disabled
+       * ```typescript
+       * // Generated with replaceEnumsWithTypes: false
+       * declare status?: CreationOptional<UserStatus>;
+       * ```
+       */
+      replaceEnumsWithTypes?: boolean;
+    },
+    /**
+     * Configuration for handling database enums during model generation.
+     * Each enum definition maps to a database column with an enum constraint,
+     * specifying the allowed values that can be stored in that column.
+     */
+    enums?: Array<{
+      /**
+       * The full path to the database column that has an enum constraint.
+       * The path follows the format `schemaName.tableName.columnName`, where:
+       * - schemaName: The database schema name (e.g., "public")
+       * - tableName: The name of the table containing the enum column
+       * - columnName: The name of the column with the enum constraint
+       *
+       * This precise path ensures accurate identification of the enum location
+       * in the database schema, allowing for proper type generation and validation.
+       *
+       * @example
+       * ```typescript
+       * path: "public.users.status"  // Schema: public, Table: users, Column: status
+       * path: "auth.accounts.role"   // Schema: auth, Table: accounts, Column: role
+       * ```
+       */
+      path: `${string}.${string}.${string}`,
+      /**
+       * The allowed values for the enum, defining the valid options that can be
+       * stored in the database column. This can be provided in two formats:
+       *
+       * 1. String Array: A simple array of string values when the enum represents
+       *    a basic list of options without associated numeric values
+       * 2. Object Map: A key-value mapping where keys represent the enum member names
+       *    and values can be either strings or numbers, useful when the enum has
+       *    specific numeric mappings or needs to preserve both names and values
+       *
+       * The format chosen affects how the TypeScript enum types are generated.
+       * Arrays create simple string enums, while object maps create enums with
+       * explicit member names and values.
+       *
+       * @example
+       * ```typescript
+       * // String array format - creates a simple string enum
+       * values: ["admin", "user", "moderator"]
+       *
+       * // Object map format - creates an enum with explicit values
+       * values: {active: 10, inactive: 5, deleted: 0, suspended: 3}
+       *
+       * // Mixed string and number values
+       * values: {draft: "draft", published: 1, archived: "archived"}
+       * ```
+       */
+      values: (string[]) | { [k: string]: string | number },
+      /**
+       * The default value for the enum column when no explicit value is provided.
+       * This can be either a string or number value that matches one of the enum's
+       * allowed values. When specified, the database will automatically use this
+       * value for new records if no enum value is explicitly set.
+       *
+       * The default value must be compatible with the enum's value type:
+       * - For string array enums, provide a string that exists in the array
+       * - For object map enums, provide either a string key or a numeric value
+       *   that exists in the map
+       *
+       * @example
+       * ```typescript
+       * // For string array enum
+       * values: ["admin", "user", "guest"]
+       * defaultValue: "guest"  // Uses default of "guest"
+       *
+       * // For object map enum
+       * values: {active: 1, inactive: 0}
+       * defaultValue: 1  // Uses default of "active" (value 1)
+       * ```
+       */
+      defaultValue?: string | number;
+    }>,
+  };
 
   /**
    * Controls the generation of database migration files. When enabled, creates
@@ -52,7 +200,26 @@ export interface GeneratorOptions {
    * ```
    * @see MigrationGenerator For the underlying migration generation implementation
    */
-  migrations?: MigrationOptions['generate'] | false;
+  migrations?: {
+    /** Generate migration files for table indexes */
+    indexes?: boolean;
+    /** Generate initial seeder files for database records */
+    seeders?: boolean;
+    /** Generate migration files for database functions */
+    functions?: boolean;
+    /** Generate migration files for custom domains */
+    domains?: boolean;
+    /** Generate migration files for composite types */
+    composites?: boolean;
+    /** Generate migration files for table structures */
+    tables?: boolean;
+    /** Generate migration files for database views */
+    views?: boolean;
+    /** Generate migration files for database triggers */
+    triggers?: boolean;
+    /** Generate migration files for foreign key constraints */
+    foreignKeys?: boolean;
+  } | false;
 
   /**
    * Whether to generate Entity Relationship Diagram (ERD) files for the database schema.
@@ -105,4 +272,27 @@ export interface GeneratorOptions {
    * ```
    */
   repositories?: boolean;
+
+  // Path to directory containing custom templates for code generation
+  templatesDir?: string;
+}
+
+/** Configuration file for generator  */
+export interface GenerateConfigFile extends GeneratorOptions {
+  /** Database connection configuration */
+  connection: {
+    /** Host name / IP address */
+    host: string;
+    /** Username for database */
+    username: string;
+    /** The password for database authentication */
+    password: string;
+    /** The database name */
+    database: string;
+    /** The port to connect */
+    port: number;
+  };
+
+  /** Output directory where generated files will be placed */
+  outputDir?: string;
 }

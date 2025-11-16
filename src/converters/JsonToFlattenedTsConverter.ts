@@ -102,7 +102,7 @@ export class JsonToFlattenedTsConverter {
 
     const interfaceBody = this.generateObjectBody(jsonData, 0).trim();
 
-    return `interface ${interfaceName} ${interfaceBody}`;
+    return `interface ${interfaceName} ${interfaceBody}`.replace(/\[]$/, '');
   }
 
   /**

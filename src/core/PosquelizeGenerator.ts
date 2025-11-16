@@ -15,9 +15,8 @@
 
 import fs from 'node:fs';
 
-import merge from 'deepmerge';
-import { rimraf } from 'rimraf';
-import { pascalCase } from 'change-case';
+import {rimraf} from 'rimraf';
+import {pascalCase} from 'change-case';
 
 // helpers
 import FileHelper from '~/helpers/FileHelper';
@@ -27,17 +26,19 @@ import StringHelper from '~/helpers/StringHelper';
 import DbUtils from '~/classes/DbUtils';
 import TemplateWriter from './TemplateWriter';
 import KnexClient from '~/classes/KnexClient';
-import MigrationGenerator, { MigrationOptions } from './MigrationGenerator';
+import ConfigHandler from '~/core/ConfigHandler';
+import ConfigCombiner from '~/core/ConfigCombiner';
+import MigrationGenerator from './MigrationGenerator';
 import RelationshipGenerator from './RelationshipGenerator';
-import TableColumns, { type ColumnInfo } from '~/classes/TableColumns';
+import TableColumns, {type ColumnInfo} from '~/classes/TableColumns';
 
 // utils
-import ModelGenerator, { InitTemplateVars, ModelTemplateVars, sp } from './ModelGenerator';
+import ModelGenerator, {InitTemplateVars, ModelTemplateVars, sp} from './ModelGenerator';
 
 // types
-import type { Knex } from 'knex';
-import type { ForeignKey, Relationship, TableIndex } from '~/typings/utils';
-import type { GeneratorOptions } from '~/typings/generator';
+import type {Knex} from 'knex';
+import type {ForeignKey, Relationship, TableIndex} from '~/typings/utils';
+import type {GeneratorOptions} from '~/typings/generator';
 
 /**
  * Generates Sequelize models, migrations, and related files from a database schema.
@@ -73,6 +74,23 @@ export default class PosquelizeGenerator {
    * @see Database connection is established in the constructor
    */
   public knex: Knex;
+  /**
+   * The model generator instance responsible for creating Sequelize model templates.
+   * This instance handles the generation of TypeScript model files, including:
+   * - Field definitions and type annotations
+   * - Interface generation for type safety
+   * - Model attributes and configurations
+   * - Relationship definitions
+   * - Index and constraint generation
+   *
+   * The generator is initialized with merged options and used throughout the
+   * model generation process for each table in the database schema.
+   *
+   * @see ModelGenerator for detailed generation logic
+   * @see getOptions() for configuration options used during initialization
+   */
+  private modelGen: InstanceType<typeof ModelGenerator>;
+  private writer: InstanceType<typeof TemplateWriter>;
 
   /**
    * Database metadata including schemas, indexes, relationships, and foreign keys.
@@ -91,17 +109,86 @@ export default class PosquelizeGenerator {
   };
 
   /**
-   * Creates a new instance of PosquelizeGenerator
-   * @param connectionString The database connection string
-   * @param rootDir The root directory where files will be generated
-   * @param options Optional configuration for the generator
+   * Initializes a new generator instance with the specified connection, output directory, and options.
+   * This constructor sets up the database connection and model generator for the generation process.
+   *
+   * @param connectionString - Database connection string (e.g., 'postgresql://user:pass@localhost/db')
+   * @param rootDir - Root directory path where all generated files will be placed
+   * @param options - Optional configuration settings for customizing the generation behavior
    */
-  constructor(
-    public readonly connectionString: string,
-    public readonly rootDir: string,
-    public readonly options: GeneratorOptions = {},
+  private constructor(
+    public connectionString: string,
+    public rootDir: string,
+    public options: GeneratorOptions = {},
   ) {
     this.knex = KnexClient.create(this.connectionString);
+    this.modelGen = new ModelGenerator(this.getOptions());
+    this.writer = new TemplateWriter(this.getOptions());
+  }
+
+  /**
+   * Creates a new PosquelizeGenerator instance with the specified parameters.
+   * This is a factory method that provides a convenient way to create generator instances.
+   *
+   * @param connectionString - Database connection string (e.g., 'postgresql://user:pass@localhost/db')
+   * @param rootDir - Root directory path where all generated files will be placed
+   * @param options - Optional configuration settings for customizing the generation behavior
+   * @returns A new instance of PosquelizeGenerator initialized with the provided parameters
+   *
+   * @example
+   * ```typescript
+   * const generator = PosquelizeGenerator.create(
+   *   'postgresql://user:pass@localhost/mydb',
+   *   './src',
+   *   { schemas: ['public'], tables: ['users'] }
+   * );
+   * ```
+   */
+  public static create(
+    connectionString: string,
+    rootDir: string,
+    options: GeneratorOptions = {},
+  ) {
+    return new PosquelizeGenerator(connectionString, rootDir, options);
+  }
+
+  /**
+   * Creates a new generator instance from a configuration file (posquelize.config.js).
+   * This method provides an alternative way to initialize the generator by loading
+   * configuration settings from an external file rather than passing parameters directly.
+   *
+   * @param dirPath - Directory path containing the configuration file
+   * @returns A new instance of the generator initialized with config file settings
+   * @throws {Error} When the configuration file cannot be found or parsed
+   *
+   * @example
+   * ```typescript
+   * const generator = PosquelizeGenerator.createWithConfig('./project-root');
+   * await generator.generate();
+   * ```
+   *
+   * @note This is a placeholder implementation. In a complete implementation,
+   * this method would read and parse the configuration file to extract connection
+   * string, output directory, and generation options.
+   */
+  public static async createWithConfig(dirPath: string): Promise<PosquelizeGenerator | null> {
+    const configFile = FileHelper.join(dirPath, 'posquelize.config.js');
+
+    if (!fs.existsSync(configFile)) {
+      console.error('Configuration file not found: "posquelize.config.js"');
+      console.info('Creating a new configuration file in the current directory...');
+      (new TemplateWriter).renderOut('pos.config', configFile);
+      console.info('Please review and modify the configuration file, then run the command again.');
+      return null;
+    }
+
+    console.info('Loading configuration file: "posquelize.config.js"');
+    const handler = new ConfigHandler(configFile);
+    if (!(await handler.load())) {
+      return null;
+    }
+
+    return handler.createGenerator();
   }
 
   /**
@@ -109,18 +196,7 @@ export default class PosquelizeGenerator {
    * @returns The merged configuration options
    */
   public getOptions(): Required<GeneratorOptions> {
-    return merge(
-      {
-        schemas: [],
-        tables: [],
-        dirname: 'database',
-        cleanRootDir: false,
-        diagram: true,
-        migrations: {},
-        repositories: true,
-      },
-      this.options,
-    );
+    return ConfigCombiner.withOptions(this?.options ?? {}) as Required<GeneratorOptions>;
   }
 
   /**
@@ -182,7 +258,7 @@ export default class PosquelizeGenerator {
    * filterSchemaTables('any_table', 'any_schema') // true (everything allowed)
    * ```
    */
-  private filterSchemaTables (tableName: string, schemaName: string): boolean {
+  private filterSchemaTables(tableName: string, schemaName: string): boolean {
     let hasPassed = true;
 
     const filterSchemas = this.getOptions().schemas;
@@ -289,13 +365,14 @@ export default class PosquelizeGenerator {
     interfacesVar: { text: string },
     config: { anyModelName: string },
   ): Promise<void> {
-    const tableData = this.getTableData(tableName, schemaName);
+    const columnsInfo = await TableColumns.list(this.knex, tableName, schemaName);
+
+    const tableData = this.getTableData(tableName, schemaName, columnsInfo);
     const modelName = this.getModelName(tableName);
 
     this.updateInitializerVars(modelName, initTplVars);
-    const modTplVars = ModelGenerator.getModelTemplateVars({schemaName, modelName, tableName});
+    const modTplVars = this.modelGen.getModelTemplateVars({schemaName, modelName, tableName});
 
-    const columnsInfo = await TableColumns.list(this.knex, tableName, schemaName);
     const timestampInfo = this.getTimestampInfo(columnsInfo);
 
     this.processColumns(columnsInfo, tableData, modTplVars, modelName, interfacesVar);
@@ -305,8 +382,8 @@ export default class PosquelizeGenerator {
     this.writeModelFile(modelName, modTplVars);
     this.updateConfig(config, modelName);
 
-    if ( this.getOptions().repositories ) {
-      TemplateWriter.writeRepoFile(this.getBaseDir(), StringHelper.tableToModel(tableName), this.getOptions().dirname);
+    if (this.getOptions().repositories) {
+      this.writer.writeRepoFile(this.getBaseDir(), StringHelper.tableToModel(tableName), this.getOptions().dirname);
     }
   }
 
@@ -315,13 +392,15 @@ export default class PosquelizeGenerator {
    * Filters the global database metadata to return only relevant data for the specified table.
    * @param tableName The name of the table
    * @param schemaName The schema name containing the table
+   * @param columnsInfo Array of column information
    * @returns Object containing table data
    */
-  private getTableData(tableName: string, schemaName: string) {
+  private getTableData(tableName: string, schemaName: string, columnsInfo: ColumnInfo[]) {
     return {
       relations: this.dbData.relationships.filter((x) => x.source.table === tableName) ?? [],
       indexes: this.dbData.indexes.filter((x) => x.table === tableName && x.schema === schemaName),
       foreignKeys: this.dbData.foreignKeys.filter((x) => x.tableName === tableName && x.schema === schemaName),
+      columnsInfo,
     };
   }
 
@@ -369,37 +448,50 @@ export default class PosquelizeGenerator {
     for (const columnInfo of columnsInfo) {
       const relation = tableData.relations.find((x) => x.source.column === columnInfo.name) ?? null;
 
-      ModelGenerator.generateEnums(columnInfo, modTplVars, modelName);
-      ModelGenerator.generateInterfaces(columnInfo, modTplVars, interfacesVar);
-      ModelGenerator.generateFields(columnInfo, modTplVars, modelName, {
+      this.modelGen.generateEnums(columnInfo, modTplVars);
+
+      this.modelGen.generateInterfaces(columnInfo, modTplVars, interfacesVar);
+      this.modelGen.generateFields({
+        columnInfo, vars: modTplVars, modelName,
         targetTable: relation?.target?.table ?? null,
         targetColumn: relation?.target?.column ?? null,
         isFK: relation !== null,
       });
 
-      ModelGenerator.generateAttributes({columnInfo, modTplVars, tableForeignKeys: tableData.foreignKeys});
+      this.modelGen.generateAttributes({columnInfo, modTplVars, tableForeignKeys: tableData.foreignKeys});
     }
   }
 
   /**
-   * Generates all model components including relations, options, indexes, and associations.
-   * Orchestrates the generation of all supplemental model code beyond basic fields.
-   * @param tableData Table-specific data including relations and indexes
-   * @param modTplVars Model template variables
-   * @param schemaName The schema name
-   * @param tableName The table name
-   * @param timestampInfo Timestamp column information
+   * Generates supplemental model components beyond basic field definitions.
+   * Creates all additional model code including relationships, configuration options,
+   * indexes, and Sequelize associations based on the table structure and metadata.
+   *
+   * This method coordinates the generation of:
+   * - Import statements for related models based on foreign key relationships
+   * - Sequelize model options including schema configuration and timestamp settings
+   * - Database index definitions for performance optimization
+   * - Association definitions for establishing model relationships
+   *
+   * @param tableData Object containing table metadata including relationships,
+   *                 indexes, and column information used for component generation
+   * @param modTplVars Template variables object that accumulates generated code
+   *                   components for the final model file
+   * @param schemaName Database schema name where the table resides
+   * @param tableName Name of the database table being processed
+   * @param timestampInfo Object indicating whether the table contains
+   *                      created_at and updated_at timestamp columns
    */
   private generateModelComponents(
-    tableData: { relations: Relationship[]; indexes: TableIndex[] },
+    tableData: { relations: Relationship[]; indexes: TableIndex[]; columnsInfo: ColumnInfo[] },
     modTplVars: ModelTemplateVars,
     schemaName: string,
     tableName: string,
     timestampInfo: { hasCreatedAt: boolean; hasUpdatedAt: boolean },
   ): void {
-    ModelGenerator.generateRelationsImports(tableData.relations, modTplVars);
-    ModelGenerator.generateOptions(modTplVars, {schemaName, tableName, ...timestampInfo});
-    ModelGenerator.generateIndexes(tableData.indexes, modTplVars);
+    this.modelGen.generateRelationsImports(tableData.relations, modTplVars);
+    this.modelGen.generateOptions(modTplVars, {schemaName, tableName, ...timestampInfo, columnsInfo: tableData.columnsInfo});
+    this.modelGen.generateIndexes(tableData.indexes, modTplVars);
     RelationshipGenerator.generateAssociations(tableData.relations, modTplVars, tableName);
   }
 
@@ -428,7 +520,7 @@ export default class PosquelizeGenerator {
    */
   private writeModelFile(modelName: string, modTplVars: ModelTemplateVars): void {
     const fileName = FileHelper.join(this.getBaseDir('models'), `${modelName}.ts`);
-    TemplateWriter.renderOut('model-template', fileName, {...modTplVars, dirname: this.getOptions().dirname});
+    this.writer.renderOut('model-template', fileName, {...modTplVars, dirname: this.getOptions().dirname});
     console.log('Model generated:', fileName);
   }
 
@@ -483,12 +575,12 @@ export default class PosquelizeGenerator {
     } = {anyModelName: ''};
 
     // Write base template files
-    TemplateWriter.writeBaseFiles(this.getBaseDir(), this.getOptions().dirname, this.connectionString, {
+    this.writer.writeBaseFiles(this.getBaseDir(), this.getOptions().dirname, this.connectionString, {
       repoBase: this.getOptions().repositories,
     });
 
     // Initialize template variables for models and interfaces
-    const initTplVars = ModelGenerator.getInitializerTemplateVars();
+    const initTplVars = this.modelGen.getInitializerTemplateVars();
     const interfacesVar: { text: string } = {
       text: '',
     };
@@ -497,12 +589,12 @@ export default class PosquelizeGenerator {
     await this.generateModels(initTplVars, interfacesVar, config);
 
     // Write model type definitions
-    TemplateWriter.renderOut('generic/models.d', FileHelper.join(this.getBaseDir(), 'typings/models.d.ts'), {
+    this.writer.renderOut('generic/models.d', FileHelper.join(this.getBaseDir(), 'typings/models.d.ts'), {
       text: interfacesVar.text.replaceAll(`\n\n\n`, `\n\n`),
     });
 
     // Write server configuration file
-    TemplateWriter.writeServerFile(FileHelper.dirname(this.getBaseDir()), config.anyModelName, this.getOptions().dirname);
+    this.writer.writeServerFile(FileHelper.dirname(this.getBaseDir()), config.anyModelName, this.getOptions().dirname);
 
     // Generate relationship definitions
     RelationshipGenerator.generateRelations(this.dbData.relationships, initTplVars, {
@@ -512,7 +604,7 @@ export default class PosquelizeGenerator {
 
     // Write models initializer file
     const fileName = FileHelper.join(this.getBaseDir('models'), 'index.ts');
-    TemplateWriter.renderOut('models-initializer', fileName, initTplVars);
+    this.writer.renderOut('models-initializer', fileName, initTplVars);
     console.log('Models Initializer generated:', fileName);
 
     await Promise.all([
@@ -538,7 +630,7 @@ export default class PosquelizeGenerator {
       return;
     }
 
-    await TemplateWriter.writeDiagrams(this.getBaseDir('diagrams'), this.connectionString);
+    await this.writer.writeDiagrams(this.getBaseDir('diagrams'), this.connectionString);
   }
 
   /**
@@ -573,13 +665,13 @@ export default class PosquelizeGenerator {
         schemas: this.dbData.schemas,
         indexes: this.dbData.indexes,
         foreignKeys: this.dbData.foreignKeys,
-      },
-      {
-        dirname: this.getOptions().dirname,
         outDir: this.getBaseDir('migrations'),
         rootDir: this.rootDir,
+      },
+      {
+        ...this.getOptions(),
+        dirname: this.getOptions().dirname,
         tables: this.getOptions().tables,
-        generate: this.getOptions().migrations as MigrationOptions['generate']
       },
     );
 

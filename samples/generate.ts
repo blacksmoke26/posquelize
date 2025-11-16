@@ -21,9 +21,40 @@ async function run(): Promise<void> {
   // postgresql://<user>:<pass>@<host>:<port>/<database>
   const connectionString = 'postgresql://user:pass@localhost:5432/mydb';
 
-  const generator = new PosquelizeGenerator(connectionString, __dirname + '/myapp', {
+  const generator = PosquelizeGenerator.create(connectionString, __dirname + '/myapp', {
     cleanRootDir: true,
     dirname: 'db',
+    //schemas: ['public'],
+    //tables: ['products'],
+    generator: {
+      model: {
+        //addNullTypeForNullable: false,
+        //replaceEnumsWithTypes: true,
+      },
+      /*enums: [{
+        path: 'public.products.status',
+        values: {active: 10, inactive: 5, deleted: 0, suspended: 3},
+        defaultValue: 10,
+      }, {
+        path: 'public.products.visibility',
+        values: ['public', 'private'],
+        // defaultValue: 'private', // Default Value is set in DDL
+      }],*/
+    },
+    //repositories: false,
+    //diagram: false,
+    /*migrations: {
+      indexes: true,
+      seeders: true,
+      functions: true,
+      domains: true,
+      composites: true,
+      tables: true,
+      views: true,
+      triggers: true,
+      foreignKeys: true,
+    },*/
+    //migrations: false, // or
   });
 
   await generator.generate();
