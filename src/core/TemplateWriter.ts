@@ -54,10 +54,11 @@ export default class TemplateWriter {
    * @param context - Data object passed to the template for variable substitution
    */
   public renderOut(template: string, outFile: string, context: Record<string, any> = {}): void {
-    let templateFile = FileHelper.join(this.options?.templatesDir ?? '', `${template}.njk`);
+    const templateDir = this.options?.templatesDir ?? '';
+    let templateFile = FileHelper.join(templateDir, `${template}.njk`);
 
-    if ( !fs.existsSync(templateFile)) {
-      templateFile = FileHelper.join(this.options?.templatesDir ?? '', `${template}.njk`);
+    if ( !templateDir.trim() || !fs.existsSync(templateFile)) {
+      templateFile = FileHelper.join(FileHelper.dirname(__dirname, 1), 'templates', `${template}.njk`);
     }
 
     const text = NunjucksHelper.renderFile(templateFile, context, {
