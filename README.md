@@ -43,7 +43,7 @@ Posquelize is a powerful CLI tool that automates the generation of Sequelize app
 - 📁 **Flexible Output**: Configurable output directory and
   Sequelize directory structure
 - 🧹 **Clean Generation**: Automatic directory cleanup with `--clean`
-- 🎨 **Template Customization**: Support for custom output templates *(upcoming)*
+- 🎨 **Template Customization**: Support for custom output templates
 - ⚙️ **Configuration Files**: Advanced configuration via
   `posquelize.config.js` for complex setups
 - 🚀 **Programmatic API**: Full TypeScript API for integration into
