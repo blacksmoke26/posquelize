@@ -11,7 +11,7 @@
 import merge from 'deepmerge';
 
 // types
-import type { GenerateConfigFile, GeneratorOptions } from '~/typings/generator';
+import type {GenerateConfigFile, GeneratorOptions} from '~/typings/generator';
 
 /**
  * Utility class that provides configuration merging capabilities using deep merge.
@@ -65,11 +65,13 @@ export default abstract class ConfigCombiner {
             addNullTypeForNullable: true,
             replaceEnumsWithTypes: false,
           },
-          enums: [],
           migration: {
             useCommonJs: false,
-          }
+          },
+          enums: [],
         },
+        dryRun: false,
+        templatesDir: '',
       },
       ...options,
     );
@@ -112,8 +114,13 @@ export default abstract class ConfigCombiner {
           replaceEnumsWithTypes: false,
           addNullTypeForNullable: true,
         },
+        migration: {
+          useCommonJs: false,
+        },
         enums: [],
       },
+      dryRun: false,
+      templatesDir: '',
     }, ...options);
   }
 }
