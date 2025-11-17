@@ -158,7 +158,7 @@ module.exports = {
     /**
      * Configuration for enum generation
      * Allows generating enums for table columns instead of plain values
-     * @type {{path: string, values: string[] | Record<string, string | number>, defaultValue: string | number}[]}
+     * @type {Array<{path: string, values: string[] | Record<string, string | number>, defaultValue: string | number}>}
      */
     // enums: [{
     //   /**
@@ -196,4 +196,10 @@ module.exports = {
    * @type {string}
    */
   //templatesDir: __dirname + '/templates',
+
+  /**
+   * Preview changes in terminal instead of writing on the disk
+   * @type {boolean}
+   */
+  //dryRun: true,
 };
