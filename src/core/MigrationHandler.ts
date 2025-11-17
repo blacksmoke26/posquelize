@@ -211,7 +211,10 @@ export default class MigrationHandler {
 
       const fileName = this.createFilename(config.outDir, `create_${data.schema}_${data.name}_function`, config.getTime());
       this.createFile(fileName, vars);
-      console.log('Generated function migration:', fileName);
+
+      if (!this.options.dryRun) {
+        console.log('Generated function migration:', fileName);
+      }
     }
   }
 
@@ -237,7 +240,10 @@ export default class MigrationHandler {
 
       const fileName = this.createFilename(config.outDir, `create_${data.schema}_${data.name}_domain`, config.getTime());
       this.createFile(fileName, vars);
-      console.log('Generated domain migration:', fileName);
+
+      if (!this.options.dryRun) {
+        console.log('Generated domain migration:', fileName);
+      }
     }
   }
 
@@ -261,7 +267,10 @@ export default class MigrationHandler {
 
     const fileName = this.createFilename(config.outDir, `create_indexes`, config.getTime());
     this.createFile(fileName, vars);
-    console.log('Generated indexes migration:', fileName);
+
+    if (!this.options.dryRun) {
+      console.log('Generated indexes migration:', fileName);
+    }
   }
 
   /**
@@ -286,7 +295,10 @@ export default class MigrationHandler {
 
       const fileName = this.createFilename(config.outDir, `create_${data.schema}_${data.name}_trigger`, config.getTime());
       this.createFile(fileName, vars);
-      console.log('Generated trigger migration:', fileName);
+
+      if (!this.options.dryRun) {
+        console.log('Generated trigger migration:', fileName);
+      }
     }
   }
 
@@ -312,7 +324,10 @@ export default class MigrationHandler {
 
       const fileName = this.createFilename(config.outDir, `create_${data.schema}_${data.name}_composite`, config.getTime());
       this.createFile(fileName, vars);
-      console.log('Generated composite migration:', fileName);
+
+      if (!this.options.dryRun) {
+        console.log('Generated composite migration:', fileName);
+      }
     }
   }
 
@@ -339,7 +354,10 @@ export default class MigrationHandler {
 
       const fileName = this.createFilename(config.outDir, `create_${data.schema}_${data.name}_view`, config.getTime());
       this.createFile(fileName, vars);
-      console.log('Generated view migration:', fileName);
+
+      if (!this.options.dryRun) {
+        console.log('Generated view migration:', fileName);
+      }
     }
   }
 
