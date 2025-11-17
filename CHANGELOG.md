@@ -3,6 +3,7 @@
 ## v0.0.3 - 2025-11-XX
 
 ### feat
+* Dry run mode ([PR-19](https://github.com/blacksmoke26/posquelize/pull/19))
 * Add support for CommonJS migration ([PR-18](https://github.com/blacksmoke26/posquelize/pull/18))
 
 ## v0.0.2 - 2025-11-16

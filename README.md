@@ -48,6 +48,7 @@ Posquelize is a powerful CLI tool that automates the generation of Sequelize app
   `posquelize.config.js` for complex setups
 - 🚀 **Programmatic API**: Full TypeScript API for integration into
   build pipelines and custom tools
+- 🧪 **Dry Run Mode**: Preview generation changes without modifying files with `--dry-run`
 
 ## Quick Start
 
@@ -92,13 +93,14 @@ posquelize --help
 | ⚙️ `--use-config`              | Load `posquelize.config.js` configuration file from current directory.   | `false`     |
 | 📚 `--schemas <schemas>`       | Specific schemas to process (comma-separated)                            | -           |
 | 📋 `--tables <tables>`         | Specific tables to generate (comma-separated)                            | -           |
-| 🧹 `--clean`                   | Clean output directory before generation                                 | `false`     |
-| 📊 `--no-diagram`              | Skip [DBML](https://dbml.dbdiagram.io/) ER diagram generation            | `false`     |
-| 📋 `--no-migrations`           | Skip migration files generation                                          | `false`     |
-| 📦 `--no-repositories`         | Skip repository files generation                                         | `false`     |
-| 🏷️ `--no-enums`               | Use alternative types (`literal` / `union`) instead of `enum`            | `false`     |
-| 📋 `--no-null-type`            | Omit `null` in type declaration for nullable column                      | `false`     |
-| 🎨 `--extract-templates`       | Extract template files into the current directory for customization | `false`     |
+| 🧹 `--clean`                   | Clean output directory before generation                                 | -     |
+| 📊 `--no-diagram`              | Skip [DBML](https://dbml.dbdiagram.io/) ER diagram generation            | -     |
+| 📋 `--no-migrations`           | Skip migration files generation                                          | -     |
+| 📦 `--no-repositories`         | Skip repository files generation                                         | -     |
+| 🏷️ `--no-enums`               | Use alternative types (`literal` / `union`) instead of `enum`            | -     |
+| 📋 `--no-null-type`            | Omit `null` in type declaration for nullable column                      | -     |
+| 🎨 `--extract-templates`       | Extract template files into the current directory for customization | -     |
+| 🧪 `--dry-run`         | Preview generation changes without modifying files | -     |
 
 ## Usage Examples
 
@@ -172,9 +174,8 @@ The tool generates a complete application structure with:
         │   ├── 📝 UserRepository.ts
         │   ├── 📝 PostRepository.ts
         │   └── ...                                  # Generated repository files
-        ├── types/                                   # TypeScript type definitions
         ├───seeders/                                 # Database seeders
-        └───typings/                                 # Type definitions
+        └───typings/                                 # TypeScript type definitions
             └──📝 models.d.ts
 ```
 
@@ -252,6 +253,9 @@ module.exports = {
   
   // Path to directory containing custom templates for code generation
   templatesDir: __dirname + '/templates',
+  
+  // Preview of changes without actually writing files to disk.
+  dryRun: true,
 };
 ```
 
