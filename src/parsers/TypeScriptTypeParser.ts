@@ -4,6 +4,8 @@
  * @see https://github.com/blacksmoke26
  */
 
+import { JsonToFlattenedTsConverter } from '@junaidatari/json2ts';
+
 // utils
 import { getJsType } from '~/constants/pg';
 import TableUtils from '~/classes/TableUtils';
@@ -13,7 +15,6 @@ import ColumnInfoUtils from '~/classes/ColumnInfoUtils';
 // types
 import type { TableColumnRaw } from '~/typings/knex';
 import type { SequelizeType } from '~/constants/sequelize';
-import { JsonToFlattenedTsConverter } from '~/converters/JsonToFlattenedTsConverter';
 
 /**
  * Parameters required for converting a JSON column to a TypeScript interface.

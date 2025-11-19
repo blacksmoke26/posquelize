@@ -2,7 +2,8 @@
   "name": "posquelize",
   "version": "0.0.3",
   "publishConfig": {
-    "tag": "latest"
+    "tag": "latest",
+    "access": "public"
   },
   "description": "Automatically generate SequelizeJS minimal application via the command line.",
   "main": "index.js",
@@ -27,10 +28,12 @@
     "lib/**/*.sql",
     "lib/**/*.njk",
     "types/**/*.ts",
+    "bin/posquelize.js",
+    "bin/posquelize.cmd",
     "*.md"
   ],
   "bin": {
-    "posquelize": "bin/posquelize"
+    "posquelize": "./bin/posquelize.js"
   },
   "repository": {
     "type": "git",
@@ -47,7 +50,8 @@
     "copy:templates": "copyfiles -u 1 src/templates/**/* lib/",
     "build": "npm run clean && npm run copy:sqls && npm run copy:templates && tsc && tsc-alias",
     "prepack": "crlf --set=LF bin/posquelize",
-    "repl": "ts-node ./src/repl.ts"
+    "repl": "ts-node ./src/repl.ts",
+    "dev": "ts-node ./samples/generate.ts"
   },
   "engines": {
     "node": ">= 20"
@@ -57,6 +61,7 @@
   "dependencies": {
     "@dbml/connector": "^5.1.0",
     "@dbml/core": "^5.1.0",
+    "@junaidatari/json2ts": "^0.0.1",
     "change-case": "^5.4.4",
     "copyfiles": "^2.4.1",
     "crlf": "^1.1.1",
