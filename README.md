@@ -323,6 +323,16 @@ try {
 }
 ```
 
+## Development Setup
+
+```bash
+git clone https://github.com/blacksmoke26/posquelize.git
+cd posquelize
+npm install
+# Edit the connection string in 'samples/generate.ts', and run
+npm run dev
+```
+
 ## Contributing to Posquelize
 
 1. Fork the project repository
