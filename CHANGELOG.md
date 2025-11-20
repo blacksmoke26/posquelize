@@ -7,7 +7,27 @@
 * Dry run mode ([PR-19](https://github.com/blacksmoke26/posquelize/pull/19))
 * Add support for CommonJS migration ([PR-18](https://github.com/blacksmoke26/posquelize/pull/18))
 * Add `--dry-run-diff` flag to generate HTML comparison file showing changes ([PR-21](https://github.com/blacksmoke26/posquelize/pull/21))
-
+* Add singularize/pluralize and naming conversion options for model names ([PR-22](https://github.com/blacksmoke26/posquelize/pull/22))
+  ```bash
+  # CLI flags
+  --case-model [c|l|o|p|u]     # Set case of model names (camelCase, lowercase, original, PascalCase, UPPER_CASE)
+  --case-property [c|l|o|p|u]  # Set case of property names (camelCase, lowercase, original, PascalCase, UPPER_CASE)
+  --case-file [c|l|o|p|u|k]    # Set case of model file names (camelCase, lowercase, original, PascalCase, UPPER_CASE, kebab-case)
+  --singularize-model [s|p|o]  # Set singularize model names (singular, plural, original)
+  ```
+  Configuration example:
+  ```javascript
+  generator: {
+    model: {
+      naming: {
+        model: 'lower_snake',
+        file: 'lower_snake', 
+        property: 'lower_snake',
+        singularizeModel: 'singular',
+      }  
+    }
+  }
+  ```
 ### enhancements
 
 * Replaced TypeScript Converter files with `@junaidatari/json2ts`
