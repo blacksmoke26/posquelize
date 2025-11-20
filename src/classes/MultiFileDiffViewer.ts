@@ -301,7 +301,7 @@ export default class MultiFileDiffViewer {
     };
 
     // Render the template using Nunjucks
-    return NunjucksHelper.renderString(template, templateData);
+    return NunjucksHelper.renderString(template, templateData, {autoescape: false});
   }
 
   /**
