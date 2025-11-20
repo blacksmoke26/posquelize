@@ -38,8 +38,8 @@
     "lib/**/*.sql",
     "lib/**/*.njk",
     "types/**/*.ts",
-    "bin/posquelize",
-    "bin/posquelize.cmd",
+    "bin/*.js",
+    "bin/*.cmd",
     "*.md"
   ],
   "bin": {
@@ -59,7 +59,7 @@
     "copy:sqls": "copyfiles -u 1 src/sqls/**/* lib/",
     "copy:templates": "copyfiles -u 1 src/templates/**/* lib/",
     "build": "npm run clean && npm run copy:sqls && npm run copy:templates && tsc && tsc-alias",
-    "prepack": "crlf --set=LF bin/posquelize",
+    "prepack": "crlf --set=LF bin/posquelize.js",
     "repl": "ts-node ./src/repl.ts",
     "dev": "ts-node ./samples/generate.ts"
   },
