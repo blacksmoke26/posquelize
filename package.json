@@ -38,7 +38,7 @@
     "lib/**/*.sql",
     "lib/**/*.njk",
     "types/**/*.ts",
-    "bin/posquelize.js",
+    "bin/posquelize",
     "bin/posquelize.cmd",
     "*.md"
   ],
