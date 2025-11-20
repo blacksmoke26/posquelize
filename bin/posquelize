@@ -104,16 +104,46 @@ const argv = yargs(hideBin(process.argv))
   .option('dry-run', {
     description: 'Preview changes in terminal instead of writing on the disk',
     type: 'boolean',
+    alias: 'dr',
   })
   .option('dry-run-diff', {
-    description: 'Generate or update a detailed HTML comparison file showing changes',
+    description: 'Generate the detailed HTML comparison file showing changes without writing on the disk',
     type: 'boolean',
+    alias: 'drd',
+  })
+  .option('case-model', {
+    description: 'Set case of model names. Choose from:\n - c (camelCase)\n - l (lowercase)\n - o (original case)\n - p (PascalCase)\n - u (UPPER_CASE)',
+    type: 'string',
+    choices: ['c', 'l', 'o', 'p', 'u'],
+    alias: 'cm'
+  })
+  .option('case-property', {
+    description: 'Set case of property names. Choose from:\n - c (camelCase)\n - l (lowercase)\n - o (original case)\n - p (PascalCase)\n - u (UPPER_CASE)',
+    type: 'string',
+    choices: ['c', 'l', 'o', 'p', 'u'],
+    alias: 'cp',
+  })
+  .option('case-file', {
+    description: 'Set case of file names. Choose from:\n - c (camelCase)\n - l (lowercase)\n - o (original case)\n - p (PascalCase)\n - u (UPPER_CASE)\n - k (kebab-case)',
+    type: 'string',
+    choices: ['c', 'l', 'o', 'p', 'u', 'k'],
+    alias: 'cf',
+  })
+  .option('singularize-model', {
+    description: 'Set singularize model names. Choose from:\n - s (singularize)\n - p (pluralize)\n - o (original)',
+    type: 'string',
+    choices: ['s', 'p', 'o'],
+    alias: 'sm',
   })
   .default({
     host: 'localhost',
     port: 5432,
     output: 'myapp',
     dirname: 'database',
+    'case-model': 'p',
+    'case-property': 'c',
+    'case-file': 'p',
+    'singularize-model': 's',
     clean: false,
   })
   .showHelpOnFail(true, 'Use --help for usage')
@@ -149,6 +179,34 @@ async function readPassword () {
   process.stdout.write('\n');
 
   return pwd;
+}
+
+function toCaseType (alias) {
+  switch (alias) {
+    case 'c':
+      return 'camel';
+    case 'l':
+      return 'lower_snake';
+    case 'p':
+      return 'pascal';
+    case 'u':
+      return 'upper_snake';
+    case 'k':
+      return 'kebab';
+    default:
+      return 'original';
+  }
+}
+
+function toSigularize (alias) {
+  switch (alias) {
+    case 's':
+      return 'singular';
+    case 'p':
+      return 'plural';
+    default:
+      return 'original';
+  }
 }
 
 /**
@@ -206,7 +264,14 @@ async function readPassword () {
     schemas: String(argv.schemas || '').split(',').filter(Boolean),
     tables: String(argv.tables || '').split(',').filter(Boolean),
     generator: {
-      model: {},
+      model: {
+        naming: {
+          model: toCaseType(argv['case-model']),
+          property: toCaseType(argv['case-property']),
+          file: toCaseType(argv['case-file']),
+          singularizeModel: toSigularize(argv['singularize-model']),
+        },
+      },
     },
     dryRun: Object.hasOwn(argv, 'dry-run'),
     dryRunDiff: Object.hasOwn(argv, 'dry-run-diff'),
