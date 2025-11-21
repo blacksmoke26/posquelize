@@ -321,11 +321,26 @@ module.exports = {
        * Determines whether migration files should be generated using CommonJS module
        * syntax instead of ECMAScript modules (ESM)
        */
-      useCommonJs: false,
+      useCommonJs: true,
     },
     model: {
       addNullTypeForNullable: true, // Controls whether nullable typed property
       replaceEnumsWithTypes: false, // Replace enum with String Union types
+      /**
+       * Configuration options for naming conventions used in code generation.
+       * Controls how models, properties, and files are named to match
+       * specific project coding standards and preferences.
+       */
+      naming: {
+        // Naming convention for model names
+        model: 'pascal',
+        // Naming convention for property names
+        property: 'camel',
+        // Naming convention for file names
+        file: 'pascal',
+        // Model singularization
+        singularizeModel: 'singular',
+      },
     },
     // Configurable enums for table columns, (generate enums instead of plain value)
     enums: [{
