@@ -13,7 +13,7 @@ Posquelize is a powerful CLI tool that automates the generation of Sequelize app
 - ✅ **Complete Model Generation**: Creates Sequelize models,
   repositories, and TypeScript type definitions
 - 🔄 **Comprehensive Migration Support**: Generates migrations for
-  tables, functions, domains, views, triggers, indexes, and keys
+  tables, functions, domains, views, triggers, indexes, and keys in EcmaScript or CommonJS format.
 - 📊 **Advanced Type Support**: Handles custom user-defined types
   with automatic conversions
 - 📚 **Multi-Schema Support**: Seamlessly handle multiple database
@@ -35,19 +35,23 @@ Posquelize is a powerful CLI tool that automates the generation of Sequelize app
   column defaults or values, ensuring proper type safety for structured data.
 - 🏗️ **Composite Type Handling**: Support for PostgreSQL composite
   types with automatic TypeScript interface generation
+- 🏷️ **Flexible Naming Conventions**: Configurable case conversion for models
+  (camelCase, PascalCase, etc.), properties, and file names
+- 🔤 **Singularization Control**: Options to singularize, pluralize, or preserve original model names
+- 📊 **Selective Component Generation**: Fine-grained control over generating diagrams,
+  migrations, repositories, and enums
 
 ### Developer Experience
 
-- 🔐 **Secure Authentication**: Interactive password prompts to avoid
-  sensitive data in command history
-- 📁 **Flexible Output**: Configurable output directory and
-  Sequelize directory structure
+- 🔐 **Secure Authentication**: Interactive password prompts to avoid sensitive data in command history
+- 📁 **Flexible Output**: Configurable output directory and Sequelize directory structure
 - 🧹 **Clean Generation**: Automatic directory cleanup with `--clean`
-- 🎨 **Template Customization**: Support for custom output templates *(upcoming)*
-- ⚙️ **Configuration Files**: Advanced configuration via
-  `posquelize.config.js` for complex setups
-- 🚀 **Programmatic API**: Full TypeScript API for integration into
-  build pipelines and custom tools
+- 🎨 **Template Customization**: Extract and customize built-in templates for tailored code generation
+- ⚙️ **Configuration Files**: Advanced configuration via `posquelize.config.js` for complex setups
+- 🚀 **Programmatic API**: Full TypeScript API for integration into build pipelines and custom tools
+- 🧪 **Dry Run Mode**: Preview generation changes without modifying files with `--dry-run`
+- 🔄 **Dry Run Interactive Mode**: Generate detailed HTML comparison showing changes 
+  between existing and generated files with `--dry-run-diff`
 
 ## Quick Start
 
@@ -89,16 +93,22 @@ posquelize --help
 | 🔌 `-p, --port <port>`         | Database connection port                                                 | `5432`      |
 | 📁 `-o, --output <directory>`  | Output directory path                                                    | `./myapp`   |
 | 📂 `-n, --dirname <directory>` | Sequelize subdirectory name                                              | `database`  |
-| ⚙️ `--use-config`              | Load `posquelize.config.js` configuration file from current directory.   | `false`     |
+| ⚙️ `--use-config`              | Load `posquelize.config.js` configuration file from current directory.   | -    |
 | 📚 `--schemas <schemas>`       | Specific schemas to process (comma-separated)                            | -           |
 | 📋 `--tables <tables>`         | Specific tables to generate (comma-separated)                            | -           |
-| 🧹 `--clean`                   | Clean output directory before generation                                 | `false`     |
-| 📊 `--no-diagram`              | Skip [DBML](https://dbml.dbdiagram.io/) ER diagram generation            | `false`     |
-| 📋 `--no-migrations`           | Skip migration files generation                                          | `false`     |
-| 📦 `--no-repositories`         | Skip repository files generation                                         | `false`     |
-| 🏷️ `--no-enums`               | Use alternative types (`literal` / `union`) instead of `enum`            | `false`     |
-| 📋 `--no-null-type`            | Omit `null` in type declaration for nullable column                      | `false`     |
-| 🎨 `--extract-templates`       | Extract template files into the current directory for customization | `false`     |
+| 🧹 `--clean`                   | Clean output directory before generation                                 | -     |
+| 📊 `--no-diagram`              | Skip [DBML](https://dbml.dbdiagram.io/) ER diagram generation            | -     |
+| 📋 `--no-migrations`           | Skip migration files generation                                          | -     |
+| 📦 `--no-repositories`         | Skip repository files generation                                         | -     |
+| 🏷️ `--no-enums`               | Use alternative types (`literal` / `union`) instead of `enum`            | -     |
+| 📋 `--no-null-type`            | Omit `null` in type declaration for nullable column                      | -     |
+| 🎨 `--extract-templates`       | Extract template files into the current directory for customization | -     |
+| 🧪 `--dr, --dry-run`         | Preview generation changes without modifying files | -     |
+| 🔄 `--drd, --dry-run-diff`       | Generate detailed HTML comparison showing changes between existing and generated files | -     |
+| 📝 `--cm, --case-model <type>`         | Set case of model names (`c`=camelCase, `l`=lowercase, `o`=original, `p`=PascalCase, `u`=UPPER_CASE) | `p` |
+| 🏷️ `--cp, --case-property <type>`      | Set case of property names (`c`=camelCase, l=lowercase, `o`=original, `p`=PascalCase, `u`=UPPER_CASE) | `c` |
+| 📁 `--cf, --case-file <type>`           | Set case of file names (`c`=camelCase, l=lowercase, `o`=original, `p`=PascalCase, `u`=UPPER_CASE, `k`=kebab-case) | `p` |
+| 🔤 `--sm, --singularize-model <type>`   | Set singularize model names (`s`=singularize, `p`=pluralize, `o`=original) | `s` |
 
 ## Usage Examples
 
@@ -124,6 +134,83 @@ posquelize -h localhost -u postgres -d myapp_db -x --tables users,posts,comments
 
 ```bash
 posquelize -h localhost -u postgres -d myapp_db -x -o ./my-sequelize-app --clean
+```
+
+### Dry Run Preview
+
+```bash
+posquelize -h localhost -u postgres -d myapp_db -x --dry-run
+```
+
+### Dry Run with HTML Diff
+
+```bash
+posquelize -h localhost -u postgres -d myapp_db -x --dry-run-diff
+```
+### Custom Naming Conventions
+
+```bash
+# Generate models with camelCase names, properties, and files
+posquelize -h localhost -u postgres -d myapp_db -x --case-model c --case-property c --case-file c
+
+# Generate models with original case for names, lowercase properties, and kebab-case files
+posquelize -h localhost -u postgres -d myapp_db -x --case-model o --case-property l --case-file k
+
+# Generate models with UPPER_CASE names but PascalCase properties
+posquelize -h localhost -u postgres -d myapp_db -x --case-model u --case-property p
+
+# Generate models with pluralized names (keep original table names)
+posquelize -h localhost -u postgres -d myapp_db -x --singularize-model p
+
+# Generate models with singular names (default behavior)
+posquelize -h localhost -u postgres -d myapp_db -x --singularize-model s
+
+# Generate models preserving original table names
+posquelize -h localhost -u postgres -d myapp_db -x --singularize-model o
+```
+
+### Advanced Naming Examples
+
+```bash
+# Full naming convention overhaul for a specific style guide
+posquelize -h localhost -u postgres -d myapp_db -x --cm c --cp c --cf k --sm s --schemas public,auth
+
+# Enterprise naming convention (PascalCase models, camelCase properties, PascalCase files)
+posquelize -h localhost -u postgres -d myapp_db -x --cm p --cp c --cf p --sm s --clean
+
+# Database-first approach (preserve all original cases and names)
+posquelize -h localhost -u postgres -d myapp_db -x --cm o --cp o --cf o --sm o
+```
+
+### Configuration File Examples
+
+#### Basic Configuration
+
+```bash
+# Create a basic config file and use it
+posquelize --use-config
+
+# The command will create posquelize.config.js if it doesn't exist
+# You can then edit the file with your settings
+
+# Generate with custom config file path
+posquelize --use-config -c /path/to/custom.config.js
+```
+
+#### Template Customization Workflow
+
+```bash
+# Step 1: Extract templates to current directory
+posquelize --extract-templates
+
+# Step 2: Customize the templates in ./templates/ directory
+# Edit the template files as needed
+
+# Step 3: Use config file to specify custom templates
+posquelize --use-config
+
+# In posquelize.config.js, specify:
+// templatesDir: __dirname + '/templates'
 ```
 
 ## Security Best Practices
@@ -172,9 +259,8 @@ The tool generates a complete application structure with:
         │   ├── 📝 UserRepository.ts
         │   ├── 📝 PostRepository.ts
         │   └── ...                                  # Generated repository files
-        ├── types/                                   # TypeScript type definitions
         ├───seeders/                                 # Database seeders
-        └───typings/                                 # Type definitions
+        └───typings/                                 # TypeScript type definitions
             └──📝 models.d.ts
 ```
 
@@ -227,6 +313,13 @@ module.exports = {
   repositories: false,  // Skip repository file generation
 
   generator: {
+    migration: {
+      /**
+       * Determines whether migration files should be generated using CommonJS module
+       * syntax instead of ECMAScript modules (ESM)
+       */
+      useCommonJs: false,
+    },
     model: {
       addNullTypeForNullable: true, // Controls whether nullable typed property
       replaceEnumsWithTypes: false, // Replace enum with String Union types
@@ -245,6 +338,12 @@ module.exports = {
   
   // Path to directory containing custom templates for code generation
   templatesDir: __dirname + '/templates',
+  
+  // Preview of changes without actually writing files to disk.
+  dryRun: true,
+  
+  // Interactive HTML comparison of changes without actually writing files to disk.
+  dryRunDiff: true,
 };
 ```
 
@@ -312,6 +411,16 @@ try {
 }
 ```
 
+## Development Setup
+
+```bash
+git clone https://github.com/blacksmoke26/posquelize.git
+cd posquelize
+npm install
+# Edit the connection string in 'samples/generate.ts', and run
+npm run dev
+```
+
 ## Contributing to Posquelize
 
 1. Fork the project repository
@@ -343,4 +452,8 @@ This project draws inspiration from innovative tools in the Sequelize ecosystem:
 
 ## License
 
-Posquelize is released under the MIT License. See LICENSE file for details.
+Posquelize is released under the MIT License.
+
+## Copyright ©️
+
+Developed with ❤️ by [Junaid Atari](https://github.com/blacksmoke26)

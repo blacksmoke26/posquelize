@@ -61,6 +61,8 @@ export default class DbmlDiagramExporter {
    * ```
    */
   public async export(connectionString: string, outputFile: string): Promise<void> {
+    if (this.options.dryRun) return;
+
     try {
       // Fetch database schema with explicit type assertion
       const schemaJson = await connector.fetchSchemaJson(connectionString, 'postgres');

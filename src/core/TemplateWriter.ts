@@ -12,6 +12,7 @@ import FileHelper from '~/helpers/FileHelper';
 import NunjucksHelper from '~/helpers/NunjucksHelper';
 
 // classes
+import CodeFile from '~/objects/CodeFile';
 import KnexClient from '~/classes/KnexClient';
 import DbmlDiagramExporter from './DbmlDiagramExporter';
 
@@ -46,6 +47,17 @@ export default class TemplateWriter {
   constructor(public readonly options: GeneratorOptions = {}) {
   }
 
+  public getTemplateFile (template: string): string {
+    const templateDir = this.options?.templatesDir ?? '';
+    let templateFile = FileHelper.join(templateDir, `${template}.njk`);
+
+    if ( !templateDir.trim() || !fs.existsSync(templateFile)) {
+      templateFile = FileHelper.join(FileHelper.dirname(__dirname, 1), 'templates', `${template}.njk`);
+    }
+
+    return templateFile;
+  }
+
   /**
    * Processes a Nunjucks template and persists the rendered output to disk.
    *
@@ -54,18 +66,13 @@ export default class TemplateWriter {
    * @param context - Data object passed to the template for variable substitution
    */
   public renderOut(template: string, outFile: string, context: Record<string, any> = {}): void {
-    const templateDir = this.options?.templatesDir ?? '';
-    let templateFile = FileHelper.join(templateDir, `${template}.njk`);
-
-    if ( !templateDir.trim() || !fs.existsSync(templateFile)) {
-      templateFile = FileHelper.join(FileHelper.dirname(__dirname, 1), 'templates', `${template}.njk`);
-    }
+    let templateFile = this.getTemplateFile(template);
 
     const text = NunjucksHelper.renderFile(templateFile, context, {
       autoescape: false,
-    });
+    }).trimEnd() + `\n`;
 
-    FileHelper.saveTextToFile(outFile, text);
+    (new CodeFile(outFile, text, this.options)).save();
   }
 
   /**
@@ -156,7 +163,10 @@ export default class TemplateWriter {
   public writeRepoFile(baseDir: string, modelName: string, mainDir: string): void {
     const fileName = FileHelper.join(baseDir, 'repositories', `${modelName}Repository.ts`);
     this.renderOut('repo-template', fileName, {modelName, dirname: mainDir});
-    console.log('Repository generated:', fileName);
+
+    if (!this.options.dryRun) {
+      console.log('Repository generated:', fileName);
+    }
   }
 
   /**

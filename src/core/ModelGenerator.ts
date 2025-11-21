@@ -47,6 +47,7 @@ import TableUtils from '~/classes/TableUtils';
 
 // formatters
 import EnumFormatter from '~/formatters/EnumFormatter';
+import ModelFormatter from '~/formatters/ModelFormatter';
 
 // types
 import {ForeignKey, Relationship, TableIndex} from '~/typings/utils';
@@ -193,74 +194,17 @@ export const sp = (count: number, str: string = '', ...args: any[]) => ' '.repea
  * ```
  */
 export default class ModelGenerator {
-  constructor(public options: GeneratorOptions) {
+  /** The formatter instance used for naming conventions and case transformations */
+  protected formatter: ModelFormatter;
+
+  /**
+   * Creates an instance of ModelGenerator with the provided generator options
+   *
+   * @param options - Generator configuration options including naming conventions and formatting preferences
+   */
+  public constructor(public options: GeneratorOptions) {
+    this.formatter = ModelFormatter.create(this.options);
   }
-
-  /**
-   * Creates a new ModelTemplateVars object with all properties initialized to empty strings
-   * Merges any provided partial variables with the defaults
-   *
-   * @function getModelTemplateVars
-   * @description Factory method for creating template variables with default values.
-   * This ensures all required properties are initialized with sensible defaults
-   * before any generation begins.
-   *
-   * @param {Partial<ModelTemplateVars>} [vars={}] - Partial template variables to merge with default values
-   * @returns {ModelTemplateVars} Complete ModelTemplateVars object with all properties initialized
-   *
-   * @example
-   * ```typescript
-   * const template = ModelGenerator.getModelTemplateVars({
-   *   modelName: 'User',
-   *   tableName: 'users'
-   * });
-   * ```
-   */
-  public getModelTemplateVars = (vars: Partial<ModelTemplateVars> = {}): ModelTemplateVars => {
-    return {
-      schemaName: '',
-      imports: '',
-      modelsImport: '',
-      modelName: '',
-      enums: '',
-      interfaces: '',
-      tableName: '',
-      fields: '',
-      associations: '',
-      attributes: '',
-      options: '',
-      typesImport: '',
-      ...vars,
-    };
-  };
-
-  /**
-   * Creates a new InitTemplateVars object with all properties initialized to empty strings
-   * Merges any provided partial variables with the defaults
-   *
-   * @function getInitializerTemplateVars
-   * @description Factory method for creating initializer template variables.
-   * Used for generating the main index file that imports and sets up all models.
-   *
-   * @param {Partial<InitTemplateVars>} [vars={}] - Partial template variables to merge with default values
-   * @returns {InitTemplateVars} Complete InitTemplateVars object with all properties initialized
-   *
-   * @example
-   * ```typescript
-   * const initTemplate = ModelGenerator.getInitializerTemplateVars({
-   *   importClasses: 'import User from \'./User\';'
-   * });
-   * ```
-   */
-  public getInitializerTemplateVars = (vars: Partial<InitTemplateVars> = {}): InitTemplateVars => {
-    return {
-      importClasses: '',
-      importTypes: '',
-      associations: '',
-      exportClasses: '',
-      ...vars,
-    };
-  };
 
   /**
    * Determines the appropriate TypeScript type for a database column
@@ -386,7 +330,7 @@ export default class ModelGenerator {
     });
 
     const nullable = params.columnInfo.flags.nullable ? '?' : '';
-    params.vars.fields += sp(2, `%sdeclare %s%s: %s;\n`, readOnly, params.columnInfo.propertyName, nullable, typeText);
+    params.vars.fields += sp(2, `%sdeclare %s%s: %s;\n`, readOnly, this.formatter.getPropertyName(params.columnInfo.name), nullable, typeText);
   };
 
   /**
@@ -445,37 +389,6 @@ export default class ModelGenerator {
   };
 
   /**
-   * Formats enum values for TypeScript enum generation
-   * Converts values to PascalCase keys with string values
-   *
-   * @function generateEnumValues
-   * @description Takes an array of enum string values and formats them into
-   * TypeScript enum members. Each value is converted to PascalCase for the
-   * key and the original value is used as the string value.
-   *
-   * @param {string[]} values - Array of enum string values
-   * @returns {string} Formatted string containing all enum member definitions
-   *
-   * @private
-   *
-   * @example
-   * ```typescript
-   * generateEnumValues(['active', 'inactive'])
-   * // Returns:
-   * // "  Active = 'active',\n  Inactive = 'inactive',\n"
-   * ```
-   */
-  private generateEnumValues = (values: string[] | { [p: string]: number | string }): string => {
-    if (Array.isArray(values)) {
-      return values.map((x) => sp(2, `%s = '%s',\n`, pascalCase(x), x)).join('');
-    }
-
-    return Object.entries(values).map(([k, v]) => {
-      return sp(2, `%s = %s,\n`, pascalCase(k), /\d+/.test(String(v)) ? v : `'${v}'`);
-    }).join('');
-  };
-
-  /**
    * Generates TypeScript enum definitions for enum columns
    * Handles both native database enums and configurable enum values
    *
@@ -484,10 +397,10 @@ export default class ModelGenerator {
    *
    * @public
    */
-  public generateEnums (columnInfo: ColumnInfo, vars: ModelTemplateVars) {
+  public generateEnums(columnInfo: ColumnInfo, vars: ModelTemplateVars) {
     let nativeEnums = SequelizeParser.parseEnums(columnInfo.sequelizeTypeParams);
 
-    if ( nativeEnums.length ) {
+    if (nativeEnums.length) {
       (new EnumFormatter({columnInfo, vars}, this.options)).process(nativeEnums);
       return;
     }
@@ -669,7 +582,7 @@ export default class ModelGenerator {
    * @private
    */
   private generateAttributeField = (columnInfo: ColumnInfo, modTplVars: ModelTemplateVars): void => {
-    modTplVars.attributes += sp(4, `%s: {\n`, columnInfo.propertyName);
+    modTplVars.attributes += sp(4, `%s: {\n`, this.formatter.getPropertyName(columnInfo.name));
 
     if (columnInfo.propertyName !== columnInfo.name) {
       modTplVars.attributes += sp(6, `field: '%s',\n`, columnInfo.name);
@@ -891,8 +804,8 @@ export default class ModelGenerator {
     modTplVars.modelsImport += sp(
       0,
       'import %s from \'./%s\';\n',
-      StringHelper.tableToModel(tableRelation.target.table),
-      StringHelper.tableToModel(tableRelation.target.table),
+      this.formatter.getModelName(tableRelation.target.table),
+      this.formatter.getFileName(tableRelation.target.table),
     );
   };
 

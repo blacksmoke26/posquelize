@@ -1,8 +1,9 @@
 {
   "name": "posquelize",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publishConfig": {
-    "tag": "latest"
+    "tag": "latest",
+    "access": "public"
   },
   "description": "Automatically generate SequelizeJS minimal application via the command line.",
   "main": "index.js",
@@ -12,6 +13,7 @@
     "scaffold",
     "generator",
     "postgres",
+    "postgresql",
     "sequelize",
     "sequelizejs",
     "mapper",
@@ -19,7 +21,16 @@
     "migration",
     "repository",
     "jsonb",
-    "minimal-app"
+    "minimal-app",
+    "orm",
+    "cli",
+    "database",
+    "schema",
+    "models",
+    "automation",
+    "codegen",
+    "development",
+    "nodejs"
   ],
   "files": [
     "*.js",
@@ -27,10 +38,12 @@
     "lib/**/*.sql",
     "lib/**/*.njk",
     "types/**/*.ts",
+    "bin/*.js",
+    "bin/*.cmd",
     "*.md"
   ],
   "bin": {
-    "posquelize": "bin/posquelize"
+    "posquelize": "./bin/posquelize.js"
   },
   "repository": {
     "type": "git",
@@ -46,8 +59,9 @@
     "copy:sqls": "copyfiles -u 1 src/sqls/**/* lib/",
     "copy:templates": "copyfiles -u 1 src/templates/**/* lib/",
     "build": "npm run clean && npm run copy:sqls && npm run copy:templates && tsc && tsc-alias",
-    "prepack": "crlf --set=LF bin/posquelize",
-    "repl": "ts-node ./src/repl.ts"
+    "prepack": "crlf --set=LF bin/posquelize.js",
+    "repl": "ts-node ./src/repl.ts",
+    "dev": "ts-node ./samples/generate.ts"
   },
   "engines": {
     "node": ">= 20"
@@ -55,19 +69,21 @@
   "author": "Junaid Atari (https://github.com/blacksmoke26)",
   "license": "ISC",
   "dependencies": {
-    "@dbml/connector": "^5.1.0",
-    "@dbml/core": "^5.1.0",
+    "@dbml/connector": "^5.2.0",
+    "@dbml/core": "^5.2.0",
+    "@junaidatari/json2ts": "^0.0.1",
     "change-case": "^5.4.4",
     "copyfiles": "^2.4.1",
     "crlf": "^1.1.1",
     "deepmerge": "^4.3.1",
-    "figlet": "^1.9.3",
+    "diff": "^8.0.2",
+    "diff2html": "^3.4.52",
     "knex": "^3.1.0",
     "nunjucks": "^3.2.4",
     "pg": "^8.16.3",
     "pg-hstore": "^2.3.4",
     "pluralize": "^8.0.0",
-    "rimraf": "^6.1.0",
+    "rimraf": "^6.1.2",
     "sprintf-js": "^1.1.3",
     "sql-formatter": "^15.6.10",
     "yargs": "^18.0.0"
@@ -80,7 +96,7 @@
     "@types/nunjucks": "^3.2.6",
     "@types/pluralize": "^0.0.33",
     "@types/sprintf-js": "^1.1.4",
-    "@types/yargs": "^17.0.34",
+    "@types/yargs": "^17.0.35",
     "ts-node": "^10.9.2",
     "tsc-alias": "^1.8.16",
     "tsconfig-paths": "^4.2.0",

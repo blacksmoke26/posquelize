@@ -16,7 +16,6 @@
 import fs from 'node:fs';
 
 import {rimraf} from 'rimraf';
-import {pascalCase} from 'change-case';
 
 // helpers
 import FileHelper from '~/helpers/FileHelper';
@@ -30,7 +29,14 @@ import ConfigHandler from '~/core/ConfigHandler';
 import ConfigCombiner from '~/core/ConfigCombiner';
 import MigrationGenerator from './MigrationGenerator';
 import RelationshipGenerator from './RelationshipGenerator';
+import MultiFileDiffViewer from '~/classes/MultiFileDiffViewer';
 import TableColumns, {type ColumnInfo} from '~/classes/TableColumns';
+
+// objects
+import CodeFile from '~/objects/CodeFile';
+
+// formatters
+import ModelFormatter from '~/formatters/ModelFormatter';
 
 // utils
 import ModelGenerator, {InitTemplateVars, ModelTemplateVars, sp} from './ModelGenerator';
@@ -38,7 +44,8 @@ import ModelGenerator, {InitTemplateVars, ModelTemplateVars, sp} from './ModelGe
 // types
 import type {Knex} from 'knex';
 import type {ForeignKey, Relationship, TableIndex} from '~/typings/utils';
-import type {GeneratorOptions} from '~/typings/generator';
+import type {GenerateConfigFile, GeneratorOptions} from '~/typings/generator';
+import type {FileComparison} from '~/typings/multi-diff';
 
 /**
  * Generates Sequelize models, migrations, and related files from a database schema.
@@ -90,7 +97,58 @@ export default class PosquelizeGenerator {
    * @see getOptions() for configuration options used during initialization
    */
   private modelGen: InstanceType<typeof ModelGenerator>;
+  /**
+   * Template writer instance for generating and writing various template files.
+   * This instance handles the rendering and writing of all template-based files including:
+   * - Model files with TypeScript interfaces and Sequelize definitions
+   * - Migration files for database schema changes
+   * - Repository pattern implementation files
+   * - Configuration and initialization files
+   * - ERD diagram files
+   *
+   * The writer is initialized with merged generator options and used throughout
+   * the generation process to create all output files.
+   */
   private writer: InstanceType<typeof TemplateWriter>;
+  /**
+   * Collection of code files generated during the process.
+   * This array stores all generated CodeFile instances which contain
+   * the file content and metadata needed for:
+   * - Diff generation in dry-run mode
+   * - File comparison and change tracking
+   * - Output formatting and validation
+   * - HTML diff viewer input
+   *
+   * The files are accumulated during generation and used when
+   * generating the interactive diff HTML report.
+   */
+  private codeFiles: CodeFile[] = [];
+  /**
+   * Model formatter instance responsible for code formatting and naming conventions.
+   * This formatter handles various formatting aspects including:
+   * - Model name case conversion (camelCase, PascalCase, etc.)
+   * - Property name transformations
+   * - File name generation and casing
+   * - Singularize/pluralize model names
+   * - Template variable preparation and formatting
+   *
+   * The formatter is initialized with generator options and used consistently
+   * throughout the model generation process to maintain naming conventions.
+   */
+  protected formatter: ModelFormatter;
+  /**
+   * Relationship generator instance for handling model associations and relationships.
+   * This generator manages the creation of:
+   * - Sequelize association definitions (belongsTo, hasMany, etc.)
+   * - Relationship imports and exports
+   * - Foreign key relationship mapping
+   * - Association options and configurations
+   * - Model initialization with relationships
+   *
+   * The generator processes database relationships and converts them into
+   * appropriate Sequelize model associations based on the configured options.
+   */
+  protected relationship: RelationshipGenerator;
 
   /**
    * Database metadata including schemas, indexes, relationships, and foreign keys.
@@ -121,9 +179,19 @@ export default class PosquelizeGenerator {
     public rootDir: string,
     public options: GeneratorOptions = {},
   ) {
+    if (this.getOptions().dryRunDiff) {
+      this.options.dryRun = true;
+      this.options.beforeFileSave = (file: CodeFile) => {
+        this.codeFiles.push(file);
+        return false;
+      };
+    }
+
     this.knex = KnexClient.create(this.connectionString);
     this.modelGen = new ModelGenerator(this.getOptions());
     this.writer = new TemplateWriter(this.getOptions());
+    this.formatter = ModelFormatter.create(this.getOptions());
+    this.relationship = new RelationshipGenerator(this.getOptions());
   }
 
   /**
@@ -154,24 +222,44 @@ export default class PosquelizeGenerator {
 
   /**
    * Creates a new generator instance from a configuration file (posquelize.config.js).
-   * This method provides an alternative way to initialize the generator by loading
-   * configuration settings from an external file rather than passing parameters directly.
+   * This static method provides an alternative initialization approach by loading
+   * configuration settings from an external JavaScript file instead of passing
+   * parameters directly to the constructor.
    *
-   * @param dirPath - Directory path containing the configuration file
-   * @returns A new instance of the generator initialized with config file settings
-   * @throws {Error} When the configuration file cannot be found or parsed
+   * The configuration file should export connection details, output directory,
+   * and generation options in the expected format. This method will:
+   * - Locate the configuration file in the specified directory
+   * - Parse and validate the configuration settings
+   * - Create and return a new generator instance with those settings
+   * - Generate a default configuration file if one doesn't exist
+   *
+   * @param dirPath - Directory path containing the posquelize.config.js file
+   * @param options - Optional additional options to merge with config file settings
+   * @returns Promise resolving to a new PosquelizeGenerator instance, or null if
+   *          configuration loading fails or the config file needs to be created
+   * @throws {Error} When the configuration file exists but cannot be parsed or
+   *                  contains invalid settings
    *
    * @example
    * ```typescript
-   * const generator = PosquelizeGenerator.createWithConfig('./project-root');
-   * await generator.generate();
+   * // Basic usage with default config file location
+   * const generator = await PosquelizeGenerator.createWithConfig('./project-root');
+   * if (generator) {
+   *   await generator.generate();
+   * }
+   *
+   * // With additional options to override config file settings
+   * const generator = await PosquelizeGenerator.createWithConfig('./project-root', {
+   *   schemas: ['public'],
+   *   tables: ['users', 'posts']
+   * });
    * ```
    *
-   * @note This is a placeholder implementation. In a complete implementation,
-   * this method would read and parse the configuration file to extract connection
-   * string, output directory, and generation options.
+   * @note If the configuration file doesn't exist, this method will automatically
+   *       create a template configuration file and return null, prompting the user
+   *       to review and modify the configuration before running again.
    */
-  public static async createWithConfig(dirPath: string): Promise<PosquelizeGenerator | null> {
+  public static async createWithConfig(dirPath: string, options: Partial<GenerateConfigFile> = {}): Promise<PosquelizeGenerator | null> {
     const configFile = FileHelper.join(dirPath, 'posquelize.config.js');
 
     if (!fs.existsSync(configFile)) {
@@ -183,7 +271,7 @@ export default class PosquelizeGenerator {
     }
 
     console.info('Loading configuration file: "posquelize.config.js"');
-    const handler = new ConfigHandler(configFile);
+    const handler = new ConfigHandler(configFile, options);
     if (!(await handler.load())) {
       return null;
     }
@@ -222,6 +310,8 @@ export default class PosquelizeGenerator {
    * Creates all necessary subdirectories within the base directory.
    */
   private initDirs(): void {
+    if (this.options.dryRun) return;
+
     this.getBaseDir('base');
     this.getBaseDir('config');
     this.getBaseDir('typings');
@@ -306,16 +396,6 @@ export default class PosquelizeGenerator {
   }
 
   /**
-   * Converts a table name to a model name in PascalCase.
-   * Handles singularization and case conversion for consistent naming.
-   * @param tableName The database table name
-   * @returns The model name in PascalCase
-   */
-  private getModelName(tableName: string): string {
-    return pascalCase(StringHelper.normalizeSingular(tableName));
-  }
-
-  /**
    * Gets all tables for a given schema, filtered by the tables option if specified.
    * Respects the generator's table filtering configuration.
    * @param schemaName The schema name to get tables for
@@ -368,10 +448,10 @@ export default class PosquelizeGenerator {
     const columnsInfo = await TableColumns.list(this.knex, tableName, schemaName);
 
     const tableData = this.getTableData(tableName, schemaName, columnsInfo);
-    const modelName = this.getModelName(tableName);
+    const modelName = this.formatter.getModelName(tableName);
 
-    this.updateInitializerVars(modelName, initTplVars);
-    const modTplVars = this.modelGen.getModelTemplateVars({schemaName, modelName, tableName});
+    this.updateInitializerVars(modelName, tableName, initTplVars);
+    const modTplVars = ModelFormatter.getModelTemplateVars({schemaName, modelName, tableName});
 
     const timestampInfo = this.getTimestampInfo(columnsInfo);
 
@@ -379,7 +459,7 @@ export default class PosquelizeGenerator {
     this.generateModelComponents(tableData, modTplVars, schemaName, tableName, timestampInfo);
 
     this.finalizeTemplateVars(modTplVars);
-    this.writeModelFile(modelName, modTplVars);
+    this.writeModelFile(this.formatter.getFileName(tableName), modTplVars);
     this.updateConfig(config, modelName);
 
     if (this.getOptions().repositories) {
@@ -408,11 +488,12 @@ export default class PosquelizeGenerator {
    * Updates the initializer template variables with model information.
    * Adds import statements and export declarations for the generated model.
    * @param modelName The name of the model
+   * @param tableName
    * @param initTplVars The initializer template variables to update
    */
-  private updateInitializerVars(modelName: string, initTplVars: InitTemplateVars): void {
-    initTplVars.importClasses += sp(0, `import %s from './%s';\n`, modelName, modelName);
-    initTplVars.importTypes += sp(0, `export * from './%s';\n`, modelName);
+  private updateInitializerVars(modelName: string, tableName: string, initTplVars: InitTemplateVars): void {
+    initTplVars.importClasses += sp(0, `import %s from './%s';\n`, modelName, this.formatter.getFileName(tableName));
+    initTplVars.importTypes += sp(0, `export * from './%s';\n`, this.formatter.getFileName(tableName));
     initTplVars.exportClasses += sp(2, `%s,\n`, modelName);
   }
 
@@ -492,7 +573,7 @@ export default class PosquelizeGenerator {
     this.modelGen.generateRelationsImports(tableData.relations, modTplVars);
     this.modelGen.generateOptions(modTplVars, {schemaName, tableName, ...timestampInfo, columnsInfo: tableData.columnsInfo});
     this.modelGen.generateIndexes(tableData.indexes, modTplVars);
-    RelationshipGenerator.generateAssociations(tableData.relations, modTplVars, tableName);
+    this.relationship.generateAssociations(tableData.relations, modTplVars, tableName);
   }
 
   /**
@@ -521,7 +602,10 @@ export default class PosquelizeGenerator {
   private writeModelFile(modelName: string, modTplVars: ModelTemplateVars): void {
     const fileName = FileHelper.join(this.getBaseDir('models'), `${modelName}.ts`);
     this.writer.renderOut('model-template', fileName, {...modTplVars, dirname: this.getOptions().dirname});
-    console.log('Model generated:', fileName);
+
+    if (!this.options.dryRun) {
+      console.log('Model generated:', fileName);
+    }
   }
 
   /**
@@ -580,7 +664,7 @@ export default class PosquelizeGenerator {
     });
 
     // Initialize template variables for models and interfaces
-    const initTplVars = this.modelGen.getInitializerTemplateVars();
+    const initTplVars = ModelFormatter.getInitializerTemplateVars();
     const interfacesVar: { text: string } = {
       text: '',
     };
@@ -597,7 +681,7 @@ export default class PosquelizeGenerator {
     this.writer.writeServerFile(FileHelper.dirname(this.getBaseDir()), config.anyModelName, this.getOptions().dirname);
 
     // Generate relationship definitions
-    RelationshipGenerator.generateRelations(this.dbData.relationships, initTplVars, {
+    this.relationship.generateRelations(this.dbData.relationships, initTplVars, {
       schemas: this.getOptions().schemas,
       tables: this.getOptions().tables,
     });
@@ -605,12 +689,79 @@ export default class PosquelizeGenerator {
     // Write models initializer file
     const fileName = FileHelper.join(this.getBaseDir('models'), 'index.ts');
     this.writer.renderOut('models-initializer', fileName, initTplVars);
-    console.log('Models Initializer generated:', fileName);
+
+    if (!this.options.dryRun) {
+      console.log('Models Initializer generated:', fileName);
+    }
 
     await Promise.all([
       this.generateMigrations(),
       this.generateDiagram(),
     ]);
+
+    await this.generateDiffHtml();
+  }
+
+  /**
+   * Generates an interactive HTML diff viewer for dry-run mode.
+   *
+   * This method creates a visual comparison between existing files and the changes
+   * that would be made during the generation process. The HTML diff viewer provides
+   * a side-by-side view of changes with syntax highlighting and file navigation.
+   *
+   * The diff viewer is only generated when the dryRunDiff option is enabled.
+   * It uses the MultiFileDiffViewer class to create an interactive HTML report
+   * with customizable themes and layout options.
+   *
+   * The generated HTML file includes:
+   * - Side-by-side file comparison
+   * - Syntax highlighting for TypeScript files
+   * - File tree navigation
+   * - Change summary statistics
+   * - Theme support (light/dark modes)
+   *
+   * @throws {Error} When diff generation fails due to file system or template errors
+   */
+  private async generateDiffHtml(): Promise<void> {
+    if (!this.options.dryRunDiff) return;
+
+    const diffViewer = new MultiFileDiffViewer(
+      {
+        // Custom theme options with improved colors
+        primaryColor: '#586069',
+        accentColor: '#0969da',
+        successColor: '#2da44e',
+        dangerColor: '#d1242f',
+        warningColor: '#d29922',
+        lightBg: '#f6f8fa',
+        darkBg: '#0d1117f2',
+        fontSizeScale: 1.0,
+      },
+      {
+        // Advanced configuration
+        headerTitle: '⚡ Posquelize Diff Viewer',
+        footerText: 'Generated with ❤️ Posquelize',
+        showFileIcons: true,
+        showSummary: true,
+      },
+    );
+
+    const fileComparisons: FileComparison[] = this.codeFiles.map(x => ({
+      ...x.getComparison(),
+      newPath: x.getFilename(this.rootDir),
+      oldPath: '', // most of the time, new and old path is same so omitting the value here
+    }) as FileComparison);
+
+    const template = this.writer.getTemplateFile('dry-run-interactive-diff')
+    const htmlOutput = diffViewer.writeFile(FileHelper.readFile(template), fileComparisons, {
+      outputFormat: 'side-by-side',
+      showFiles: true,
+      matching: 'words',
+      compactMode: false,
+      theme: 'light'
+    }, this.rootDir);
+
+    console.log(`✨ Interactive diff viewer generated: ${htmlOutput}`);
   }
 
   /**
@@ -626,11 +777,9 @@ export default class PosquelizeGenerator {
    * @throws {Error} When diagram generation fails due to connection or permission issues
    */
   private async generateDiagram(): Promise<void> {
-    if (!this.getOptions().diagram) {
-      return;
+    if (this.getOptions().diagram) {
+      await this.writer.writeDiagrams(this.getBaseDir('diagrams'), this.connectionString);
     }
-
-    await this.writer.writeDiagrams(this.getBaseDir('diagrams'), this.connectionString);
   }
 
   /**
@@ -655,7 +804,7 @@ export default class PosquelizeGenerator {
    * @see {@link MigrationGenerator} For the underlying migration generation logic
    */
   private async generateMigrations(): Promise<void> {
-    if (this.getOptions().migrations === false) {
+    if (this.getOptions().migrations === false || this.getOptions().dryRun) {
       return;
     }
 

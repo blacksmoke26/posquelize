@@ -217,8 +217,11 @@ export default class MigrationGenerator {
     await this.handler.generateTableInfo({ tableName, columnsInfo, schemaName, tableForeignKeys }, variables);
 
     const fileName = this.handler.createFilename(config.outDir, `create_${schemaName}_${tableName}_table`, config.getTime());
-    console.log('Generated table migration:', fileName);
     this.handler.createFile(fileName, variables);
+
+    if ( !this.options.dryRun) {
+      console.log('Generated table migration:', fileName);
+    }
   }
 
   /**
@@ -261,9 +264,12 @@ export default class MigrationGenerator {
     const fkVars = MigrationFormatter.initVariables();
     this.handler.generateForeignKeys(this.data.foreignKeys, fkVars);
 
-    const fileName = this.handler.createFilename(config.outDir, `create_create-foreign-keys`, config.getTime());
-    console.log('Generated FK migration:', fileName);
+    const fileName = this.handler.createFilename(config.outDir, `create-foreign-keys`, config.getTime());
     this.handler.createFile(fileName, fkVars);
+
+    if ( !this.options.dryRun ) {
+      console.log('Generated FK migration:', fileName);
+    }
   }
 
   /**

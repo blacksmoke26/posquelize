@@ -10,8 +10,11 @@
 
 import merge from 'deepmerge';
 
+// objects
+import CodeFile from '~/objects/CodeFile';
+
 // types
-import type { GenerateConfigFile, GeneratorOptions } from '~/typings/generator';
+import type {GenerateConfigFile, GeneratorOptions} from '~/typings/generator';
 
 /**
  * Utility class that provides configuration merging capabilities using deep merge.
@@ -64,8 +67,23 @@ export default abstract class ConfigCombiner {
           model: {
             addNullTypeForNullable: true,
             replaceEnumsWithTypes: false,
+            naming: {
+              model: 'pascal',
+              file: 'pascal',
+              property: 'camel',
+              singularizeModel: 'singular',
+            },
+          },
+          migration: {
+            useCommonJs: false,
           },
           enums: [],
+        },
+        dryRun: false,
+        dryRunDiff: false,
+        templatesDir: '',
+        beforeFileSave(_file: CodeFile): boolean {
+          return true;
         },
       },
       ...options,
@@ -87,30 +105,6 @@ export default abstract class ConfigCombiner {
         port: 5432,
       },
       outputDir: '',
-      schemas: [],
-      tables: [],
-      dirname: 'database',
-      cleanRootDir: false,
-      diagram: true,
-      migrations: {
-        indexes: true,
-        seeders: true,
-        functions: true,
-        domains: true,
-        composites: true,
-        tables: true,
-        views: true,
-        triggers: true,
-        foreignKeys: true,
-      },
-      repositories: true,
-      generator: {
-        model: {
-          replaceEnumsWithTypes: false,
-          addNullTypeForNullable: true,
-        },
-        enums: [],
-      },
-    }, ...options);
+    }, this.withOptions(), ...options);
   }
 }

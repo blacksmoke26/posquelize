@@ -1,9 +1,43 @@
-
 # ChangeLog
+
+## v0.0.3 - 2025-11-XX
+
+### features
+
+* Dry run mode ([PR-19](https://github.com/blacksmoke26/posquelize/pull/19))
+* Add support for CommonJS migration ([PR-18](https://github.com/blacksmoke26/posquelize/pull/18))
+* Add `--dry-run-diff` flag to generate HTML comparison file showing changes ([PR-21](https://github.com/blacksmoke26/posquelize/pull/21))
+* Add singularize/pluralize and naming conversion options for model names ([PR-22](https://github.com/blacksmoke26/posquelize/pull/22))
+  ```bash
+  # CLI flags
+  --case-model [c|l|o|p|u]     # Set case of model names (camelCase, lowercase, original, PascalCase, UPPER_CASE)
+  --case-property [c|l|o|p|u]  # Set case of property names (camelCase, lowercase, original, PascalCase, UPPER_CASE)
+  --case-file [c|l|o|p|u|k]    # Set case of model file names (camelCase, lowercase, original, PascalCase, UPPER_CASE, kebab-case)
+  --singularize-model [s|p|o]  # Set singularize model names (singular, plural, original)
+  ```
+  Configuration example:
+  ```javascript
+  generator: {
+    model: {
+      naming: {
+        model: 'lower_snake',
+        file: 'lower_snake', 
+        property: 'lower_snake',
+        singularizeModel: 'singular',
+      }  
+    }
+  }
+  ```
+### enhancements
+
+* Replaced TypeScript Converter files with `@junaidatari/json2ts`
+  dependency, New database scripts (multiple sample schemas). ([PR-20](https://github.com/blacksmoke26/posquelize/pull/20))
+* Remove `figlet` dependency and replace with custom ASCII art implementation 
+  in the CLI header display for improved performance and reduced package size ([PR-21](https://github.com/blacksmoke26/posquelize/pull/21))
 
 ## v0.0.2 - 2025-11-16
 
-### feat
+### features
 * Customized Nunjucks templates ([PR-16](https://github.com/blacksmoke26/posquelize/pull/16))
 * Paranoid Mode ([PR-14](https://github.com/blacksmoke26/posquelize/pull/14))
 * Configuration file support `posquelize.config.js` ([PR-13](https://github.com/blacksmoke26/posquelize/pull/13))
@@ -20,7 +54,7 @@
 
 ## v0.0.1 - 2025-11-12
 
-### feat
+### features
 
 * Add `--no-repositories` CLI flag to skip repository file generation and update config import path. Fixes issue with repository generation logic in filtering workflows. ([26c152d](http://github.com/blacksmoke26/posquelize-generator/commit/26c152d))
 * Add generator options typings for migrations, diagrams, and repositories ([b4f7fbc](http://github.com/blacksmoke26/posquelize-generator/commit/b4f7fbc))
@@ -37,8 +71,7 @@
 * Add a utility class to convert JSON objects into TypeScript interfaces with support for nested structures, arrays, and circular references ([27b71e5](http://github.com/blacksmoke26/posquelize-generator/commit/27b71e5))
 * Add JSON to flattened TypeScript converter ([fbc174d](http://github.com/blacksmoke26/posquelize-generator/commit/fbc174d))
 
-
-### fix
+### fixes
 
 * Change migrations option to object Update `migrations` configuration from boolean to object to support advanced migration settings. ([3c02a78](http://github.com/blacksmoke26/posquelize-generator/commit/3c02a78))
 * 5a870b7 (origin/develop) Merge pull request #3 from blacksmoke26/fix/broken-filtering ([5a870b7](http://github.com/blacksmoke26/posquelize-generator/commit/5a870b7))
@@ -47,16 +80,13 @@
 * Remove await from jsonToInterface call ([ec1a529](http://github.com/blacksmoke26/posquelize-generator/commit/ec1a529))
 * Return default interfaces on invalid input instead of errors ([0be83a8](http://github.com/blacksmoke26/posquelize-generator/commit/0be83a8))
 
-
 ### docs
 
 * Add documentation for the Posquelize programmatic API, including basic usage, advanced configuration options, and error handling examples. This enables developers to integrate database generation into their applications with fine-grained control over output and configuration. ([a6f8de9](http://github.com/blacksmoke26/posquelize-generator/commit/a6f8de9))
 
-
 ### style
 
 * Add space before asterisks in comments ([00d0e7f](http://github.com/blacksmoke26/posquelize-generator/commit/00d0e7f))
-
 
 ### refactor
 
@@ -72,8 +102,6 @@
 * Fix indentation issues and remove prettier formatting from json to ts converters ([7192980](http://github.com/blacksmoke26/posquelize-generator/commit/7192980))
 * Make JSON to TypeScript conversion asynchronous ([9eb2a11](http://github.com/blacksmoke26/posquelize-generator/commit/9eb2a11))
 
-
 ### ci
 
 * Update dependencies (remove json-ts, add prettier) ([bad671f](http://github.com/blacksmoke26/posquelize-generator/commit/bad671f))
-

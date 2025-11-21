@@ -4,8 +4,11 @@
  * @see https://github.com/blacksmoke26
  */
 
-import { singular } from 'pluralize';
-import { camelCase, noCase, pascalCase } from 'change-case';
+import pluralize, {singular} from 'pluralize';
+import {camelCase, kebabCase, noCase, pascalCase, snakeCase} from 'change-case';
+
+// types
+import type {CaseType, FileCaseType, SingularizeModel} from '~/typings/generator';
 
 /**
  * Utility class for string transformations commonly used in database naming conventions.
@@ -112,5 +115,64 @@ export default abstract class StringHelper {
    */
   public static toConfigurableEnumName(tableName: string, columnName: string): string {
     return pascalCase(singular(tableName) + '_' + singular(columnName));
+  }
+
+  /**
+   * Returns the singular or plural form of a name based on the specified type.
+   *
+   * @param name - The string to singularize or pluralize
+   * @param type - The type of transformation ('singular', 'plural', or undefined)
+   * @returns The transformed string in singular or plural form, or the original name if type is undefined
+   *
+   * @example
+   * ```typescript
+   * StringHelper.getModeSingularize('users', 'singular') // returns 'user'
+   * StringHelper.getModeSingularize('user', 'plural') // returns 'users'
+   * StringHelper.getModeSingularize('user', undefined) // returns 'user'
+   * ```
+   */
+  public static getModeSingularize(name: string, type: SingularizeModel | undefined): string {
+    switch (type) {
+      case 'singular':
+        return singular(name);
+      case 'plural':
+        return pluralize(name);
+      default:
+        return name;
+    }
+  }
+
+  /**
+   * Formats a string according to the specified case type.
+   *
+   * @param name - The string to format
+   * @param caseType - The case type to apply ('camel', 'lower_snake', 'pascal', 'upper_snake', 'kebab', or undefined)
+   * @returns The formatted string in the specified case, or the original name if caseType is undefined
+   *
+   * @example
+   * ```typescript
+   * StringHelper.formatName('userName', 'camel') // returns 'userName'
+   * StringHelper.formatName('userName', 'lower_snake') // returns 'user_name'
+   * StringHelper.formatName('userName', 'pascal') // returns 'UserName'
+   * StringHelper.formatName('userName', 'upper_snake') // returns 'USER_NAME'
+   * StringHelper.formatName('userName', 'kebab') // returns 'user-name'
+   * StringHelper.formatName('userName', undefined) // returns 'userName'
+   * ```
+   */
+  public static formatName(name: string, caseType: FileCaseType | CaseType | undefined): string {
+    switch (caseType) {
+      case 'camel':
+        return camelCase(name);
+      case 'lower_snake':
+        return snakeCase(name);
+      case 'pascal':
+        return pascalCase(name);
+      case 'upper_snake':
+        return snakeCase(name).toUpperCase();
+      case 'kebab':
+        return kebabCase(name);
+      default:
+        return name;
+    }
   }
 }

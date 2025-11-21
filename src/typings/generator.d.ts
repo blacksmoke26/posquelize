@@ -8,6 +8,91 @@
  * repositories, and various output formatting preferences.
  */
 
+// objects
+import CodeFile from '~/objects/CodeFile';
+
+/**
+ * Supported case naming conventions for transforming strings.
+ * - camel: camelCase (first letter lowercase, subsequent words capitalized)
+ * - lower_snake: snake_case (all lowercase with underscores)
+ * - original: unchanged case (preserves original casing)
+ * - pascal: PascalCase (first letter and subsequent words capitalized)
+ * - upper_snake: UPPER_SNAKE_CASE (all uppercase with underscores)
+ */
+export type CaseType = 'camel' | 'lower_snake' | 'original' | 'pascal' | 'upper_snake';
+
+/**
+ * Supported case naming conventions for file names.
+ * Extends CaseType with the additional kebab-case option.
+ * - kebab: kebab-case (all lowercase with hyphens)
+ */
+export type FileCaseType = CaseType | 'kebab';
+
+/**
+ * Options for controlling model name singularization/pluralization behavior.
+ * Determines how database table names are transformed into TypeScript model class names.
+ *
+ * - 'singular': Converts plural table names to singular (e.g., 'users' → 'User')
+ * - 'plural': Preserves plural form in model names (e.g., 'users' → 'Users')
+ * - 'original': Uses table name as-is without transformation (e.g., 'users' → 'users')
+ *
+ * @default 'singular'
+ */
+export type SingularizeModel = 'singular' | 'plural' | 'original';
+
+/**
+ * Configuration options for naming conventions used in code generation.
+ * Controls how models, properties, and files are named to match
+ * specific project coding standards and preferences.
+ */
+export type ModelNamingOptions = {
+  /**
+   * The naming convention for generated model class names.
+   * Controls the case transformation applied to model identifiers.
+   * @default 'pascal'
+   */
+  model?: CaseType;
+  /**
+   * The naming convention for generated property names within models.
+   * Controls the case transformation applied to class properties.
+   * @default 'camel'
+   */
+  property?: CaseType;
+  /**
+   * The naming convention for generated file names.
+   * Controls the case transformation applied to output file names.
+   * @default 'pascal'
+   */
+  file?: FileCaseType;
+  /**
+   * Controls whether model and file names should be singularized when generated
+   * from plural table names. This option affects the naming convention for both
+   * the TypeScript model class names and their corresponding file names.
+   *
+   * When set to 'singular', table names in plural form (e.g., 'users', 'orders')
+   * will be converted to singular form for the model (e.g., 'User', 'Order').
+   * This follows common ORM conventions where a model represents a single entity.
+   *
+   * When set to 'plural', the original plural table names are preserved in the
+   * model class names (e.g., 'Users', 'Orders'). This can be useful when working
+   * with APIs or systems that consistently use plural naming.
+   *
+   * When set to 'original', the table names are used as-is without any singular
+   * or plural transformation, preserving the exact database table naming.
+   *
+   * This option works in conjunction with the 'model' and 'file' naming convention
+   * settings to determine the final output names.
+   *
+   * @default 'singular'
+   * @example
+   * // For table name 'users'
+   * singularizeModel: 'singular'  // Generates: class User, file User.ts
+   * singularizeModel: 'plural'    // Generates: class Users, file Users.ts
+   * singularizeModel: 'original'  // Generates: class users, file users.ts
+   */
+  singularizeModel?: SingularizeModel;
+}
+
 /**
  * Configuration options for the generator
  */
@@ -94,6 +179,12 @@ export interface GeneratorOptions {
        * ```
        */
       replaceEnumsWithTypes?: boolean;
+      /**
+       * Configuration options for naming conventions used in code generation.
+       * Controls how models, properties, and files are named to match
+       * specific project coding standards and preferences.
+       */
+      naming?: ModelNamingOptions;
     },
     /**
      * Configuration for handling database enums during model generation.
@@ -169,6 +260,46 @@ export interface GeneratorOptions {
        */
       defaultValue?: string | number;
     }>,
+    /**
+     * Configuration options for migration file generation. These settings control
+     * how database migration files are created and formatted, allowing for
+     * customization of the migration output to match specific project requirements
+     * and build environments.
+     */
+    migration?: {
+      /**
+       * Determines whether migration files should be generated using CommonJS module
+       * syntax instead of ECMAScript modules (ESM). This option is particularly useful
+       * for maintaining compatibility with older Node.js environments or build systems
+       * that rely on CommonJS for their module loading mechanism.
+       *
+       * When enabled (true):
+       * - Files will use require() for imports
+       * - Exports will use module.exports
+       * - Generated files will have .js extension with CommonJS syntax
+       *
+       * When disabled (false):
+       * - Files will use ES6 import/export syntax
+       * - Generated files will use ESM module format
+       * - Better compatibility with modern TypeScript configurations
+       *
+       * This setting affects only the syntax of generated migration files and does
+       * not impact the actual migration functionality or database operations.
+       *
+       * @default false
+       * @example
+       * // CommonJS output (useCommonJs: true)
+       * module.exports = {
+       *   up: async (queryInterface, Sequelize) => { ... },
+       *   down: async (queryInterface, Sequelize) => { ... }
+       * };
+       *
+       * // ESM output (useCommonJs: false)
+       * export async function up (queryInterface, Sequelize) { ... },
+       * export async function down (queryInterface, Sequelize) { ... },
+       */
+      useCommonJs?: boolean;
+    },
   };
 
   /**
@@ -275,6 +406,98 @@ export interface GeneratorOptions {
 
   // Path to directory containing custom templates for code generation
   templatesDir?: string;
+
+  /**
+   * Controls whether to display a preview of changes without actually writing files to disk.
+   * When enabled, the generator will output the diff of what would be generated,
+   * allowing you to review the changes before committing them to the file system.
+   *
+   * This is particularly useful for:
+   * - Previewing generation results before making changes
+   * - Debugging configuration issues
+   * - Validating template modifications
+   * - Reviewing generated code in CI/CD pipelines
+   *
+   * @default false
+   * @example
+   * ```typescript
+   * // Enable dry run to preview changes
+   * { dryRun: true }
+   *
+   * // Normal operation (default)
+   * { dryRun: false }
+   * ```
+   */
+  dryRun?: boolean;
+
+  /**
+   * Controls the generation of a detailed HTML diff file showing side-by-side comparisons
+   * of what would be changed, instead of writing files to disk. When enabled alongside
+   * dryRun, this provides a comprehensive visual representation of all modifications
+   * that would be made to the existing files, including additions, deletions, and
+   * modifications.
+   *
+   * The generated HTML diff includes:
+   * - Side-by-side comparison of original and proposed changes
+   * - Color-coded highlighting of differences (additions in green, deletions in red)
+   * - Line-by-line diff visualization
+   * - File tree overview of all affected files
+   * - Summary statistics of total changes
+   *
+   * This feature is particularly useful for:
+   * - Reviewing large-scale changes before applying them
+   * - Code review processes in team environments
+   * - Documentation of changes for audit trails
+   * - Debugging complex generation scenarios
+   * - Presenting proposed changes to stakeholders
+   *
+   * The HTML diff file is generated in the root output directory with a timestamp
+   * in the filename (e.g., "diff_2025-01-15_14-30-25.html").
+   *
+   * @default false
+   * @example
+   * ```typescript
+   * // Enable HTML diff generation with preview
+   * { dryRun: true, dryRunDiff: true }
+   *
+   * // Normal operation without diff (default)
+   * { dryRun: false, dryRunDiff: false }
+   * ```
+   */
+  dryRunDiff?: boolean;
+
+  /**
+   * Callback function invoked before a generated file is saved to disk.
+   * This hook allows for custom validation, modification, or cancellation
+   * of file saves during the generation process.
+   *
+   * @param file - The CodeFile instance representing the file about to be saved
+   * @returns boolean - Return false to prevent the file from being saved,
+   *                   return true to allow the save operation to proceed
+   *
+   * @example
+   * ```typescript
+   * // Example usage to prevent saving certain files
+   * beforeFileSave: (file) => {
+   *   if (file.path.includes('temp') || file.content.length === 0) {
+   *     return false; // Skip saving this file
+   *   }
+   *   return true; // Allow save
+   * }
+   * ```
+   *
+   * @example
+   * ```typescript
+   * // Example usage to modify file content before saving
+   * beforeFileSave: (file) => {
+   *   if (file.path.endsWith('.ts')) {
+   *     file.content = file.content.replace(/export/g, 'public export');
+   *   }
+   *   return true;
+   * }
+   * ```
+   */
+  beforeFileSave?(file: CodeFile): boolean;
 }
 
 /** Configuration file for generator  */

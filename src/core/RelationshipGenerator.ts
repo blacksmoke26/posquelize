@@ -1,24 +1,27 @@
 /**
- * @fileoverview Provides utilities for generating relationship aliases and Sequelize mixin declarations
+ * @fileoverview Provides utilities for generating relationship aliases and Sequelize mixin declarations.
  * @author Junaid Atari <mj.atari@gmail.com>
  * @copyright 2025 Junaid Atari
  * @see https://github.com/blacksmoke26
  * @version 1.0.0
  */
 
-import pluralize, { singular } from 'pluralize';
-import { camelCase, pascalCase } from 'change-case';
+import pluralize, {singular} from 'pluralize';
 
 // helpers
 import StringHelper from '~/helpers/StringHelper';
 
+// formatters
+import ModelFormatter from '~/formatters/ModelFormatter';
+
 // utils
-import { sp } from './ModelGenerator';
-import { RelationshipType } from '~/classes/DbUtils';
+import {sp} from './ModelGenerator';
+import {RelationshipType} from '~/classes/DbUtils';
 
 // types
-import type { Relationship } from '~/typings/utils';
-import type { InitTemplateVars, ModelTemplateVars } from './ModelGenerator';
+import type {Relationship} from '~/typings/utils';
+import type {InitTemplateVars, ModelTemplateVars} from './ModelGenerator';
+import type {GeneratorOptions} from '~/typings/generator';
 
 /**
  * Interface for filtering relationships during generation.
@@ -34,8 +37,8 @@ import type { InitTemplateVars, ModelTemplateVars } from './ModelGenerator';
  *   tables: ['audit_log', 'temp_data']
  * };
  *
- * // Use with RelationshipGenerator.generateRelations()
- * RelationshipGenerator.generateRelations(relationships, templateVars, filters);
+ * // Use with this.generateRelations()
+ * this.generateRelations(relationships, templateVars, filters);
  * ```
  */
 export interface GenerateRelationFilters {
@@ -58,13 +61,25 @@ export interface GenerateRelationFilters {
  * @example
  * ```typescript
  * // Generate mixins for a HasMany relationship
- * const mixins = RelationshipGenerator.generateHasManyMixins('users', 'Post', 'User');
+ * const mixins = this.generateHasManyMixins('users', 'Post', 'User');
  *
  * // Create an alias for a BelongsTo relationship
- * const alias = RelationshipGenerator.createAlias(RelationshipType.BelongsTo, source, target);
+ * const alias = this.createAlias(RelationshipType.BelongsTo, source, target);
  * ```
  */
-export default abstract class RelationshipGenerator {
+export default class RelationshipGenerator {
+  /** The formatter instance used for naming conventions in generated relationships */
+  protected formatter: ModelFormatter;
+
+  /**
+   * Creates a new RelationshipGenerator instance.
+   *
+   * @param options - Generator options controlling the output format and behavior
+   */
+  constructor(public options: GeneratorOptions) {
+    this.formatter = ModelFormatter.create(this.options);
+  }
+
   /**
    * Generates a relationship alias name based on the relationship type and table/column information.
    * The alias follows Sequelize naming conventions and is used to uniquely identify relationships.
@@ -78,7 +93,7 @@ export default abstract class RelationshipGenerator {
    * @example
    * ```typescript
    * // For a HasMany relationship from posts to users
-   * const alias = RelationshipGenerator.createAlias(
+   * const alias = this.createAlias(
    *   RelationshipType.HasMany,
    *   { table: 'posts', column: 'userId' },
    *   { table: 'users', column: 'id' }
@@ -86,18 +101,29 @@ export default abstract class RelationshipGenerator {
    * // Returns: 'postUser'
    * ```
    */
-  public static createAlias(type: RelationshipType, source: Relationship['source'], target: Relationship['target'], junction?: Relationship['junction']): string {
-    switch (type) {
-      case RelationshipType.HasMany:
-        return singular(StringHelper.toPropertyName(source.table)) + pluralize(StringHelper.omitId(source.column, true));
-      case RelationshipType.BelongsTo:
-        return singular(StringHelper.toPropertyName(target.table)) + StringHelper.omitId(target.column, true);
-      case RelationshipType.HasOne:
-        return singular(StringHelper.toPropertyName(source.table)) + StringHelper.omitId(source.column, true);
-      case RelationshipType.ManyToMany:
-        return camelCase(pascalCase(singular(junction?.table as string))) + pluralize(StringHelper.omitId(source.table, true)) + 'es';
-      default:
-        return '';
+  public createAlias(type: RelationshipType, source: Relationship['source'], target: Relationship['target'], junction?: Relationship['junction']): string {
+    if (type === RelationshipType.HasMany) {
+      return this.formatter.getPropertyName(
+        this.formatter.getModelName(source.table) + '_' + this.formatter.getPropertyName(pluralize(StringHelper.omitId(source.column))),
+      );
+      //return singular(StringHelper.toPropertyName(source.table)) + pluralize(StringHelper.omitId(source.column, true));
+    } else if (type === RelationshipType.BelongsTo) {
+      return this.formatter.getPropertyName(
+        this.formatter.getModelName(target.table) + '_' + StringHelper.omitId(target.column),
+      );
+      //return singular(StringHelper.toPropertyName(target.table)) + StringHelper.omitId(target.column, true);
+    } else if (type === RelationshipType.HasOne) {
+      return this.formatter.getPropertyName(
+        this.formatter.getModelName(source.table) + '_' + StringHelper.omitId(source.column),
+      );
+      //return singular(StringHelper.toPropertyName(source.table)) + StringHelper.omitId(source.column, true);
+    } else if (type === RelationshipType.ManyToMany) {
+      return this.formatter.getPropertyName(
+        singular(junction?.table as string) + '_' + pluralize(StringHelper.omitId(source.table)) + 'es',
+      );
+      //return camelCase(pascalCase(singular(junction?.table as string))) + pluralize(StringHelper.omitId(source.table, true)) + 'es';
+    } else {
+      return '';
     }
   }
 
@@ -117,27 +143,27 @@ export default abstract class RelationshipGenerator {
    *
    * @example
    * ```typescript
-   * const mixins = RelationshipGenerator.generateHasManyMixins('users', 'Post', 'User');
+   * const mixins = this.generateHasManyMixins('users', 'Post', 'User');
    * // Returns:
    * // declare users?: Sequelize.NonAttribute<User>;
    * // declare getUsers: Sequelize.HasManyGetAssociationsMixin<User>;
    * // ... and more mixin declarations
    * ```
    */
-  public static generateHasManyMixins(alias: string, sourceModel: string, targetModel: string): string {
+  public generateHasManyMixins(alias: string, sourceModel: string, targetModel: string): string {
     let mixins = '\n';
-    mixins += sp(2, `// %s hasMany %s (as %s)\n`, sourceModel, targetModel, alias);
-    mixins += sp(2, `declare %s?: Sequelize.NonAttribute<%s>;\n`, alias, targetModel);
-    mixins += sp(2, `declare get%s: Sequelize.HasManyGetAssociationsMixin<%s>;\n`, pascalCase(alias), targetModel);
-    mixins += sp(2, `declare set%s: Sequelize.HasManySetAssociationsMixin<%s, %s>;\n`, pascalCase(alias), targetModel, 'number');
-    mixins += sp(2, `declare add%s: Sequelize.HasManyAddAssociationMixin<%s, %s>;\n`, pascalCase(alias), targetModel, 'number');
-    mixins += sp(2, `declare add%ses: Sequelize.HasManyAddAssociationsMixin<%s, %s>;\n`, pascalCase(alias), targetModel, 'number');
-    mixins += sp(2, `declare create%s: Sequelize.HasManyCreateAssociationMixin<%s>;\n`, pascalCase(alias), targetModel);
-    mixins += sp(2, `declare remove%s: Sequelize.HasManyRemoveAssociationMixin<%s, %s>;\n`, pascalCase(alias), targetModel, 'number');
-    mixins += sp(2, `declare remove%ses: Sequelize.HasManyRemoveAssociationsMixin<%s, %s>;\n`, pascalCase(alias), targetModel, 'number');
-    mixins += sp(2, `declare has%s: Sequelize.HasManyHasAssociationMixin<%s, %s>;\n`, pascalCase(alias), targetModel, 'number');
-    mixins += sp(2, `declare has%ses: Sequelize.HasManyHasAssociationsMixin<%s, %s>;\n`, pascalCase(alias), targetModel, 'number');
-    mixins += sp(2, `declare count%s: Sequelize.HasManyCountAssociationsMixin;\n`, pascalCase(alias));
+    mixins += sp(2, `// %s hasMany %s (as %s)\n`, sourceModel, targetModel, this.formatter.getPropertyName(alias));
+    mixins += sp(2, `declare %s?: Sequelize.NonAttribute<%s>;\n`, this.formatter.getPropertyName(alias), targetModel);
+    mixins += sp(2, `declare %s: Sequelize.HasManyGetAssociationsMixin<%s>;\n`, this.formatter.getPropertyName('get_' + alias), targetModel);
+    mixins += sp(2, `declare %s: Sequelize.HasManySetAssociationsMixin<%s, %s>;\n`, this.formatter.getPropertyName('set_' + alias), targetModel, 'number');
+    mixins += sp(2, `declare %s: Sequelize.HasManyAddAssociationMixin<%s, %s>;\n`, this.formatter.getPropertyName('add_' + alias), targetModel, 'number');
+    mixins += sp(2, `declare %ses: Sequelize.HasManyAddAssociationsMixin<%s, %s>;\n`, this.formatter.getPropertyName('add_' + alias), targetModel, 'number');
+    mixins += sp(2, `declare %s: Sequelize.HasManyCreateAssociationMixin<%s>;\n`, this.formatter.getPropertyName('create_' + alias), targetModel);
+    mixins += sp(2, `declare %s: Sequelize.HasManyRemoveAssociationMixin<%s, %s>;\n`, this.formatter.getPropertyName('remove_' + alias), targetModel, 'number');
+    mixins += sp(2, `declare %ses: Sequelize.HasManyRemoveAssociationsMixin<%s, %s>;\n`, this.formatter.getPropertyName('remove_' + alias), targetModel, 'number');
+    mixins += sp(2, `declare %s: Sequelize.HasManyHasAssociationMixin<%s, %s>;\n`, this.formatter.getPropertyName('has_' + alias), targetModel, 'number');
+    mixins += sp(2, `declare %ses: Sequelize.HasManyHasAssociationsMixin<%s, %s>;\n`, this.formatter.getPropertyName('has_' + alias), targetModel, 'number');
+    mixins += sp(2, `declare %s: Sequelize.HasManyCountAssociationsMixin;\n`, this.formatter.getPropertyName('count_' + alias));
     return mixins;
   }
 
@@ -156,20 +182,20 @@ export default abstract class RelationshipGenerator {
    *
    * @example
    * ```typescript
-   * const mixins = RelationshipGenerator.generateBelongsToMixins('user', 'Post', 'User');
+   * const mixins = this.generateBelongsToMixins('user', 'Post', 'User');
    * // Returns:
    * // declare user?: Sequelize.NonAttribute<User>;
    * // declare getUser: Sequelize.BelongsToGetAssociationMixin<User>;
    * // ... and more mixin declarations
    * ```
    */
-  public static generateBelongsToMixins(alias: string, sourceModel: string, targetModel: string): string {
+  public generateBelongsToMixins(alias: string, sourceModel: string, targetModel: string): string {
     let mixins = '\n';
-    mixins += sp(2, `// %s belongsTo %s (as %s)\n`, sourceModel, targetModel, alias);
-    mixins += sp(2, `declare %s?: Sequelize.NonAttribute<%s>;\n`, alias, targetModel);
-    mixins += sp(2, `declare get%s: Sequelize.BelongsToGetAssociationMixin<%s>;\n`, pascalCase(alias), targetModel);
-    mixins += sp(2, `declare set%s: Sequelize.BelongsToSetAssociationMixin<%s, %s>;\n`, pascalCase(alias), targetModel, 'number');
-    mixins += sp(2, `declare create%s: Sequelize.BelongsToCreateAssociationMixin<%s>;\n`, pascalCase(alias), targetModel);
+    mixins += sp(2, `// %s belongsTo %s (as %s)\n`, sourceModel, targetModel, this.formatter.getPropertyName(alias));
+    mixins += sp(2, `declare %s?: Sequelize.NonAttribute<%s>;\n`, this.formatter.getPropertyName(alias), targetModel);
+    mixins += sp(2, `declare %s: Sequelize.BelongsToGetAssociationMixin<%s>;\n`, this.formatter.getPropertyName('get_' + alias), targetModel);
+    mixins += sp(2, `declare %s: Sequelize.BelongsToSetAssociationMixin<%s, %s>;\n`, this.formatter.getPropertyName('set_' + alias), targetModel, 'number');
+    mixins += sp(2, `declare %s: Sequelize.BelongsToCreateAssociationMixin<%s>;\n`, this.formatter.getPropertyName('create_' + alias), targetModel);
     return mixins;
   }
 
@@ -188,20 +214,20 @@ export default abstract class RelationshipGenerator {
    *
    * @example
    * ```typescript
-   * const mixins = RelationshipGenerator.generateHasOneMixins('profile', 'User', 'Profile');
+   * const mixins = this.generateHasOneMixins('profile', 'User', 'Profile');
    * // Returns:
    * // declare profile?: Sequelize.NonAttribute<Profile>;
    * // declare getProfile: Sequelize.HasOneGetAssociationMixin<Profile>;
    * // ... and more mixin declarations
    * ```
    */
-  public static generateHasOneMixins(alias: string, sourceModel: string, targetModel: string): string {
+  public generateHasOneMixins(alias: string, sourceModel: string, targetModel: string): string {
     let mixins = '\n';
-    mixins += sp(2, `// %s hasOne %s (as %s)\n`, sourceModel, targetModel, alias);
-    mixins += sp(2, `declare %s?: Sequelize.NonAttribute<%s>;\n`, alias, targetModel);
-    mixins += sp(2, `declare get%s: Sequelize.HasOneGetAssociationMixin<%s>;\n`, pascalCase(alias), targetModel);
-    mixins += sp(2, `declare set%s: Sequelize.HasOneSetAssociationMixin<%s, %s>;\n`, pascalCase(alias), targetModel, 'number');
-    mixins += sp(2, `declare create%s: Sequelize.HasOneCreateAssociationMixin<%s>;`, pascalCase(alias), targetModel);
+    mixins += sp(2, `// %s hasOne %s (as %s)\n`, sourceModel, targetModel, this.formatter.getPropertyName(alias));
+    mixins += sp(2, `declare %s?: Sequelize.NonAttribute<%s>;\n`, this.formatter.getPropertyName(alias), targetModel);
+    mixins += sp(2, `declare %s: Sequelize.HasOneGetAssociationMixin<%s>;\n`, this.formatter.getPropertyName('get_' + alias), targetModel);
+    mixins += sp(2, `declare %s: Sequelize.HasOneSetAssociationMixin<%s, %s>;\n`, this.formatter.getPropertyName('set_' + alias), targetModel, 'number');
+    mixins += sp(2, `declare %s: Sequelize.HasOneCreateAssociationMixin<%s>;`, this.formatter.getPropertyName('create_' + alias), targetModel);
     return mixins;
   }
 
@@ -221,27 +247,27 @@ export default abstract class RelationshipGenerator {
    *
    * @example
    * ```typescript
-   * const mixins = RelationshipGenerator.generateBelongsToManyMixins('roles', 'User', 'Role');
+   * const mixins = this.generateBelongsToManyMixins('roles', 'User', 'Role');
    * // Returns:
    * // declare roles?: Sequelize.NonAttribute<Role[]>;
    * // declare getRoles: Sequelize.BelongsToManyGetAssociationsMixin<Role>;
    * // ... and more mixin declarations
    * ```
    */
-  public static generateBelongsToManyMixins(alias: string, sourceModel: string, targetModel: string): string {
+  public generateBelongsToManyMixins(alias: string, sourceModel: string, targetModel: string): string {
     let mixins = '\n';
-    mixins += sp(2, `// %s belongsToMany %s (as %s)\n`, sourceModel, targetModel, alias);
-    mixins += sp(2, `declare %s?: Sequelize.NonAttribute<%s[]>;\n`, alias, targetModel);
-    mixins += sp(2, `declare get%s: Sequelize.BelongsToManyGetAssociationsMixin<%s>;\n`, pascalCase(alias), targetModel);
-    mixins += sp(2, `declare set%s: Sequelize.BelongsToManySetAssociationsMixin<%s, %s>;\n`, pascalCase(alias), targetModel, 'number');
-    mixins += sp(2, `declare add%s: Sequelize.BelongsToManyAddAssociationMixin<%s, %s>;\n`, pascalCase(alias), targetModel, 'number');
-    mixins += sp(2, `declare add%ses: Sequelize.BelongsToManyAddAssociationsMixin<%s, %s>;\n`, pascalCase(alias), targetModel, 'number');
-    mixins += sp(2, `declare create%s: Sequelize.BelongsToManyCreateAssociationMixin<%s>;\n`, pascalCase(alias), targetModel);
-    mixins += sp(2, `declare remove%s: Sequelize.BelongsToManyRemoveAssociationMixin<%s, %s>;\n`, pascalCase(alias), targetModel, 'number');
-    mixins += sp(2, `declare remove%ses: Sequelize.BelongsToManyRemoveAssociationsMixin<%s, %s>;\n`, pascalCase(alias), targetModel, 'number');
-    mixins += sp(2, `declare has%s: Sequelize.BelongsToManyHasAssociationMixin<%s, %s>;\n`, pascalCase(alias), targetModel, 'number');
-    mixins += sp(2, `declare has%ses: Sequelize.BelongsToManyHasAssociationsMixin<%s, %s>;\n`, pascalCase(alias), targetModel, 'number');
-    mixins += sp(2, `declare count%s: Sequelize.BelongsToManyCountAssociationsMixin;\n`, pascalCase(alias));
+    mixins += sp(2, `// %s belongsToMany %s (as %s)\n`, sourceModel, targetModel, this.formatter.getPropertyName(alias));
+    mixins += sp(2, `declare %s?: Sequelize.NonAttribute<%s[]>;\n`, this.formatter.getPropertyName(alias), targetModel);
+    mixins += sp(2, `declare %s: Sequelize.BelongsToManyGetAssociationsMixin<%s>;\n`, this.formatter.getPropertyName('get_' + alias), targetModel);
+    mixins += sp(2, `declare %s: Sequelize.BelongsToManySetAssociationsMixin<%s, %s>;\n`, this.formatter.getPropertyName('set_' + alias), targetModel, 'number');
+    mixins += sp(2, `declare %s: Sequelize.BelongsToManyAddAssociationMixin<%s, %s>;\n`, this.formatter.getPropertyName('add_' + alias), targetModel, 'number');
+    mixins += sp(2, `declare %ses: Sequelize.BelongsToManyAddAssociationsMixin<%s, %s>;\n`, this.formatter.getPropertyName('add_' + alias), targetModel, 'number');
+    mixins += sp(2, `declare %s: Sequelize.BelongsToManyCreateAssociationMixin<%s>;\n`, this.formatter.getPropertyName('create_' + alias), targetModel);
+    mixins += sp(2, `declare %s: Sequelize.BelongsToManyRemoveAssociationMixin<%s, %s>;\n`, this.formatter.getPropertyName('remove_' + alias), targetModel, 'number');
+    mixins += sp(2, `declare %ses: Sequelize.BelongsToManyRemoveAssociationsMixin<%s, %s>;\n`, this.formatter.getPropertyName('remove_' + alias), targetModel, 'number');
+    mixins += sp(2, `declare %s: Sequelize.BelongsToManyHasAssociationMixin<%s, %s>;\n`, this.formatter.getPropertyName('has_' + alias), targetModel, 'number');
+    mixins += sp(2, `declare %ses: Sequelize.BelongsToManyHasAssociationsMixin<%s, %s>;\n`, this.formatter.getPropertyName('has_' + alias), targetModel, 'number');
+    mixins += sp(2, `declare %s: Sequelize.BelongsToManyCountAssociationsMixin;\n`, this.formatter.getPropertyName('count_' + alias));
     return mixins;
   }
 
@@ -257,7 +283,7 @@ export default abstract class RelationshipGenerator {
    *
    * @example
    * ```typescript
-   * const result = RelationshipGenerator.processAssociation(
+   * const result = this.processAssociation(
    *   {
    *     type: RelationshipType.HasMany,
    *     source: { table: 'posts', column: 'userId' },
@@ -268,34 +294,34 @@ export default abstract class RelationshipGenerator {
    * // Returns { mixins: '...', declaration: '...' }
    * ```
    */
-  public static processAssociation(relation: Relationship, alreadyAdded: string[]): { mixins: string; declaration: string } {
-    const { type, source, target, junction } = relation;
-    const sourceModel = StringHelper.tableToModel(source.table);
-    const targetModel = StringHelper.tableToModel(target.table);
-    const alias = RelationshipGenerator.createAlias(type, source, target, junction);
+  public processAssociation(relation: Relationship, alreadyAdded: string[]): { mixins: string; declaration: string } {
+    const {type, source, target, junction} = relation;
+    const sourceModel = this.formatter.getModelName(source.table);
+    const targetModel = this.formatter.getModelName(target.table);
+    const alias = this.createAlias(type, source, target, junction);
 
-    if (alreadyAdded.includes(alias)) return { mixins: '', declaration: '' };
+    if (alreadyAdded.includes(alias)) return {mixins: '', declaration: ''};
     alreadyAdded.push(alias);
 
-    const declaration = sp(4, '%s: Sequelize.Association<%s, %s>;\n', alias, sourceModel, targetModel);
+    const declaration = sp(4, '%s: Sequelize.Association<%s, %s>;\n', this.formatter.getPropertyName(alias), sourceModel, targetModel);
     let mixins = '';
 
     switch (type) {
       case RelationshipType.HasMany:
-        mixins = RelationshipGenerator.generateHasManyMixins(alias, sourceModel, targetModel);
+        mixins = this.generateHasManyMixins(alias, sourceModel, targetModel);
         break;
       case RelationshipType.BelongsTo:
-        mixins = RelationshipGenerator.generateBelongsToMixins(alias, sourceModel, targetModel);
+        mixins = this.generateBelongsToMixins(alias, sourceModel, targetModel);
         break;
       case RelationshipType.HasOne:
-        mixins = RelationshipGenerator.generateHasOneMixins(alias, sourceModel, targetModel);
+        mixins = this.generateHasOneMixins(alias, sourceModel, targetModel);
         break;
       case RelationshipType.ManyToMany:
-        mixins = RelationshipGenerator.generateBelongsToManyMixins(alias, sourceModel, targetModel);
+        mixins = this.generateBelongsToManyMixins(alias, sourceModel, targetModel);
         break;
     }
 
-    return { mixins, declaration };
+    return {mixins, declaration};
   }
 
   /**
@@ -310,7 +336,7 @@ export default abstract class RelationshipGenerator {
    * @example
    * ```typescript
    * const templateVars = { associations: '' };
-   * RelationshipGenerator.generateAssociations(
+   * this.generateAssociations(
    *   [
    *     {
    *       type: RelationshipType.HasMany,
@@ -324,7 +350,7 @@ export default abstract class RelationshipGenerator {
    * // templateVars.associations now contains the generated declarations
    * ```
    */
-  public static generateAssociations(relations: Relationship[], modTplVars: ModelTemplateVars, tableName: string): void {
+  public generateAssociations(relations: Relationship[], modTplVars: ModelTemplateVars, tableName: string): void {
     if (!relations.length) return;
 
     let mixins: string = '';
@@ -332,13 +358,13 @@ export default abstract class RelationshipGenerator {
     const alreadyAdded: string[] = [];
 
     for (const relation of relations) {
-      const result = RelationshipGenerator.processAssociation(relation, alreadyAdded);
+      const result = this.processAssociation(relation, alreadyAdded);
       mixins += result.mixins;
       declaration += result.declaration;
     }
 
     modTplVars.associations += `\n${mixins}\n`;
-    modTplVars.associations += sp(2, `/** Static associations defined for the %s model */\n`, StringHelper.tableToModel(tableName));
+    modTplVars.associations += sp(2, `/** Static associations defined for the %s model */\n`, this.formatter.getModelName(tableName));
     modTplVars.associations += sp(2, `declare public static associations: {\n`);
     modTplVars.associations += declaration;
     modTplVars.associations += sp(2, `}`);
@@ -354,7 +380,7 @@ export default abstract class RelationshipGenerator {
    * @example
    * ```typescript
    * const templateVars = { associations: '' };
-   * RelationshipGenerator.generateBelongsToRelation(
+   * this.generateBelongsToRelation(
    *   {
    *     type: RelationshipType.BelongsTo,
    *     source: { table: 'posts', column: 'userId' },
@@ -365,18 +391,18 @@ export default abstract class RelationshipGenerator {
    * // templateVars.associations contains: User.belongsTo(Post, { as: 'user', foreignKey: 'userId' });
    * ```
    */
-  public static generateBelongsToRelation(relationship: Relationship, initTplVars: InitTemplateVars): void {
-    const { source, target } = relationship;
-    const alias = RelationshipGenerator.createAlias(RelationshipType.BelongsTo, source, target);
+  public generateBelongsToRelation(relationship: Relationship, initTplVars: InitTemplateVars): void {
+    const {source, target} = relationship;
+    const alias = this.createAlias(RelationshipType.BelongsTo, source, target);
 
     initTplVars.associations += sp(
       2,
       `%s.%s(%s, { as: '%s', foreignKey: '%s' });\n`,
-      StringHelper.tableToModel(target.table),
+      this.formatter.getModelName(target.table),
       'belongsTo',
-      StringHelper.tableToModel(source.table),
+      this.formatter.getModelName(source.table),
       alias,
-      StringHelper.toPropertyName(target.column),
+      this.formatter.getPropertyName(target.column),
     );
   }
 
@@ -390,7 +416,7 @@ export default abstract class RelationshipGenerator {
    * @example
    * ```typescript
    * const templateVars = { associations: '' };
-   * RelationshipGenerator.generateHasOneRelation(
+   * this.generateHasOneRelation(
    *   {
    *     type: RelationshipType.HasOne,
    *     source: { table: 'users', column: 'profileId' },
@@ -401,18 +427,18 @@ export default abstract class RelationshipGenerator {
    * // templateVars.associations contains: Profile.hasOne(User, { as: 'profile', foreignKey: 'profileId' });
    * ```
    */
-  public static generateHasOneRelation(relationship: Relationship, initTplVars: InitTemplateVars): void {
-    const { source, target } = relationship;
-    const alias = RelationshipGenerator.createAlias(RelationshipType.HasOne, source, target);
+  public generateHasOneRelation(relationship: Relationship, initTplVars: InitTemplateVars): void {
+    const {source, target} = relationship;
+    const alias = this.createAlias(RelationshipType.HasOne, source, target);
 
     initTplVars.associations += sp(
       2,
       `%s.%s(%s, { as: '%s', foreignKey: '%s' });\n`,
-      StringHelper.tableToModel(target.table),
+      this.formatter.getModelName(target.table),
       'hasOne',
-      StringHelper.tableToModel(source.table),
+      this.formatter.getModelName(source.table),
       alias,
-      StringHelper.toPropertyName(source.column),
+      this.formatter.getPropertyName(source.column),
     );
   }
 
@@ -426,7 +452,7 @@ export default abstract class RelationshipGenerator {
    * @example
    * ```typescript
    * const templateVars = { associations: '' };
-   * RelationshipGenerator.generateHasManyRelation(
+   * this.generateHasManyRelation(
    *   {
    *     type: RelationshipType.HasMany,
    *     source: { table: 'users', column: 'id' },
@@ -437,18 +463,18 @@ export default abstract class RelationshipGenerator {
    * // templateVars.associations contains: Post.hasMany(User, { as: 'posts', foreignKey: 'id' });
    * ```
    */
-  public static generateHasManyRelation(relationship: Relationship, initTplVars: InitTemplateVars): void {
-    const { source, target } = relationship;
-    const alias = RelationshipGenerator.createAlias(RelationshipType.HasMany, source, target);
+  public generateHasManyRelation(relationship: Relationship, initTplVars: InitTemplateVars): void {
+    const {source, target} = relationship;
+    const alias = this.createAlias(RelationshipType.HasMany, source, target);
 
     initTplVars.associations += sp(
       2,
       `%s.%s(%s, { as: '%s', foreignKey: '%s' });\n`,
-      StringHelper.tableToModel(target.table),
+      this.formatter.getModelName(target.table),
       'hasMany',
-      StringHelper.tableToModel(source.table),
+      this.formatter.getModelName(source.table),
       alias,
-      StringHelper.toPropertyName(source.column),
+      this.formatter.getPropertyName(source.column),
     );
   }
 
@@ -462,7 +488,7 @@ export default abstract class RelationshipGenerator {
    * @example
    * ```typescript
    * const templateVars = { associations: '' };
-   * RelationshipGenerator.generateBelongsToManyRelation(
+   * this.generateBelongsToManyRelation(
    *   {
    *     type: RelationshipType.ManyToMany,
    *     source: { table: 'users', column: 'id' },
@@ -474,20 +500,20 @@ export default abstract class RelationshipGenerator {
    * // templateVars.associations contains: User.belongsToMany(Role, { as: 'userRoles', through: UserRole, foreignKey: 'userId', otherKey: 'roleId' });
    * ```
    */
-  public static generateBelongsToManyRelation(relationship: Relationship, initTplVars: InitTemplateVars): void {
-    const { source, target, junction } = relationship;
-    const alias = RelationshipGenerator.createAlias(RelationshipType.ManyToMany, source, target, junction);
+  public generateBelongsToManyRelation(relationship: Relationship, initTplVars: InitTemplateVars): void {
+    const {source, target, junction} = relationship;
+    const alias = this.createAlias(RelationshipType.ManyToMany, source, target, junction);
 
     initTplVars.associations += sp(
       2,
       `%s.%s(%s, { as: '%s', through: %s, foreignKey: '%s', otherKey: '%s' });\n`,
-      StringHelper.tableToModel(source.table),
+      this.formatter.getModelName(source.table),
       'belongsToMany',
-      StringHelper.tableToModel(target.table),
+      this.formatter.getModelName(target.table),
       alias,
-      StringHelper.tableToModel(junction.table as string),
-      singular(source.table) + pascalCase(source.column),
-      singular(target.table) + pascalCase(source.column),
+      this.formatter.getModelName(junction.table as string),
+      this.formatter.getPropertyName(this.formatter.getModelName(source.table) + '_' + source.column),
+      this.formatter.getPropertyName(this.formatter.getModelName(target.table) + '_' + source.column),
     );
   }
 
@@ -513,7 +539,7 @@ export default abstract class RelationshipGenerator {
    *   importTypes: '',
    *   exportClasses: ''
    * };
-   * RelationshipGenerator.generateRelations(
+   * this.generateRelations(
    *   [
    *     {
    *       type: RelationshipType.HasMany,
@@ -526,7 +552,7 @@ export default abstract class RelationshipGenerator {
    * // templateVars now contains all the generated relationship code
    * ```
    */
-  public static generateRelations(relationships: Relationship[], initTplVars: InitTemplateVars, filters: GenerateRelationFilters = {}): void {
+  public generateRelations(relationships: Relationship[], initTplVars: InitTemplateVars, filters: GenerateRelationFilters = {}): void {
     // Initialize filters for schemas and tables
     const schemasFilter = filters?.schemas ?? [];
     const tablesFilter = filters?.tables ?? [];
@@ -545,16 +571,16 @@ export default abstract class RelationshipGenerator {
       // Generate code based on relationship type
       switch (relationship.type) {
         case RelationshipType.BelongsTo:
-          RelationshipGenerator.generateBelongsToRelation(relationship, initTplVars);
+          this.generateBelongsToRelation(relationship, initTplVars);
           break;
         case RelationshipType.HasOne:
-          RelationshipGenerator.generateHasOneRelation(relationship, initTplVars);
+          this.generateHasOneRelation(relationship, initTplVars);
           break;
         case RelationshipType.HasMany:
-          RelationshipGenerator.generateHasManyRelation(relationship, initTplVars);
+          this.generateHasManyRelation(relationship, initTplVars);
           break;
         case RelationshipType.ManyToMany:
-          RelationshipGenerator.generateBelongsToManyRelation(relationship, initTplVars);
+          this.generateBelongsToManyRelation(relationship, initTplVars);
           break;
       }
     }
